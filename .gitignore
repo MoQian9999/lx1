@@ -1,0 +1,66 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+out/
+*.tsbuildinfo
+
+# IDE & Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Environment & Config
+.env
+.env.local
+.env.*.local
+*.log
+
+# Claude Code
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+venv/
+.venv/
+
+# Rust
+target/
+
+# Java
+*.class
+*.jar
+*.war
+
+# Go
+/bin/
+/pkg/
+
+# C/C++
+*.o
+*.obj
+*.out
+*.exe
+
+# Misc
+*.tmp
+*.temp
+.cache/
+coverage/
