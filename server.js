@@ -527,39 +527,35 @@ setInterval(() => {
 // ============================================================
 // 启动服务器（支持交互式端口输入）
 // ============================================================
-function getLocalIP() {
+function getLocalIPs() {
   const interfaces = os.networkInterfaces();
-  // VPN/虚拟网卡关键字（英文+中文），这些 IP 对外不可达
-  const skipKeywords = ["vpn", "virtual", "radmin", "vethernet", "hamachi",
-    "tunnel", "pseudo", "loopback", "hyper-v", "虚拟", "vpn"];
-  let bestIP = "127.0.0.1";
+  const result = [];
   for (const [name, addrs] of Object.entries(interfaces)) {
-    const lowName = name.toLowerCase();
-    if (skipKeywords.some(k => lowName.includes(k))) continue;
     for (const addr of addrs) {
       if (addr.family === "IPv4" && !addr.internal) {
-        bestIP = addr.address;
-        return bestIP; // 找到第一个真实网卡就返回
+        result.push({ name, ip: addr.address });
       }
     }
   }
-  // 回退：如果全部被过滤，取第一个非内部 IPv4
-  if (bestIP === "127.0.0.1") {
-    for (const addrs of Object.values(interfaces)) {
-      for (const addr of addrs) {
-        if (addr.family === "IPv4" && !addr.internal) return addr.address;
-      }
-    }
-  }
-  return bestIP;
+  return result;
 }
 
 function showBanner(port) {
-  const ip = getLocalIP();
+  const ips = getLocalIPs();
   console.log("========================================");
   console.log("  桌游集合 - 服务器已启动");
-  console.log("  访问地址：http://" + ip + ":" + port);
   console.log("  本机访问：http://localhost:" + port);
+  console.log("");
+  if (ips.length === 0) {
+    console.log("  (未检测到局域网 IP)");
+  } else if (ips.length === 1) {
+    console.log("  局域网地址：http://" + ips[0].ip + ":" + port);
+  } else {
+    console.log("  检测到多个 IP，请根据你的网络选择对应地址：");
+    for (const item of ips) {
+      console.log("    http://" + item.ip + ":" + port + "  (" + item.name + ")");
+    }
+  }
   console.log("========================================");
 }
 
