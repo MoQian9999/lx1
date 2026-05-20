@@ -242,7 +242,7 @@ wss.on("connection", (ws) => {
           return;
         }
         currentUsername = name;
-        const defaultAvatar = avatarText || name.charAt(0);
+        const defaultAvatar = avatarText || name.slice(0, 6);
         users.set(name, {
           ws,
           avatarText: defaultAvatar,
@@ -273,7 +273,7 @@ wss.on("connection", (ws) => {
         const { avatarText, textColor, borderColor } = msg;
         // 限制头像文字 1-3 个字符
         if (avatarText !== undefined) {
-          u.avatarText = avatarText.slice(0, 3) || currentUsername.charAt(0);
+          u.avatarText = avatarText.slice(0, 6) || currentUsername.slice(0, 6);
         }
         if (textColor !== undefined) u.textColor = textColor;
         if (borderColor !== undefined) u.borderColor = borderColor;

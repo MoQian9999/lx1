@@ -260,7 +260,7 @@ function doLogin() {
   sendMessage({
     type: "login",
     username: username,
-    avatarText: username.charAt(0),
+    avatarText: username.slice(0, 6),
     textColor: "#333333",
     borderColor: "#cccccc",
   });
@@ -308,8 +308,8 @@ function sendProfileUpdate() {
 // ============================================================
 function updateProfile() {
   const input = document.getElementById("inputAvatarText");
-  const text = input.value.slice(0, 3);
-  currentProfile.avatarText = text || currentUser.charAt(0);
+  const text = input.value.slice(0, 6);
+  currentProfile.avatarText = text || currentUser.slice(0, 6);
   applyProfile();
   saveProfile();
   sendProfileUpdate();
