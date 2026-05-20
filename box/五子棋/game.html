@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>五子棋</title>
+  <link rel="stylesheet" href="game.css">
+</head>
+<body>
+
+  <!-- ========== 对局双方信息 ========== -->
+  <div class="game-header">
+    <!-- 对手 -->
+    <div id="opponentPlayerInfo" class="player-info">
+      <div id="opAvatar" class="player-avatar">?</div>
+      <span id="opName" class="player-name">等待中...</span>
+      <div id="opStone" class="player-stone stone-white"></div>
+    </div>
+
+    <span class="vs-text">VS</span>
+
+    <!-- 自己 -->
+    <div id="myPlayerInfo" class="player-info">
+      <div id="myStone" class="player-stone stone-black"></div>
+      <span id="myName" class="player-name">我</span>
+      <div id="myAvatar" class="player-avatar">我</div>
+    </div>
+  </div>
+
+  <!-- ========== 棋盘 ========== -->
+  <div class="board-wrapper">
+    <canvas id="boardCanvas"></canvas>
+    <!-- 等待遮罩 -->
+    <div id="waitingOverlay">
+      <span id="waitingText">等待对手加入...</span>
+    </div>
+  </div>
+
+  <!-- ========== 底部状态与按钮 ========== -->
+  <div class="game-footer">
+    <span id="statusText"></span>
+    <button id="btnPlayAgain" onclick="playAgain()">再来一局</button>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>

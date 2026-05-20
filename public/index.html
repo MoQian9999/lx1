@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>桌游集合</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ============================================================ -->
+  <!-- 顶部导航栏 -->
+  <!-- ============================================================ -->
+  <header id="topBar">
+    <!-- User 方块 -->
+    <div id="userBlock" class="user-block" onclick="toggleSidebar()" title="点击打开侧边栏">
+      <span id="userBlockText">user</span>
+    </div>
+    <span id="topTitle">桌游集合</span>
+    <div></div> <!-- 占位，保持 flex 布局 -->
+  </header>
+
+  <!-- ============================================================ -->
+  <!-- 左侧侧边栏（遮罩层 + 面板） -->
+  <!-- ============================================================ -->
+  <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
+  <div id="sidebar" class="sidebar">
+    <!-- ========== 账户抽屉 ========== -->
+    <div class="drawer-item">
+      <div class="drawer-header active" onclick="toggleDrawer('account')">
+        <span>👤 账户</span>
+        <span class="drawer-arrow">▾</span>
+      </div>
+      <div class="drawer-body open" id="drawerAccount">
+        <!-- 未登录状态 -->
+        <div id="accountLogin" class="account-section">
+          <label>用户名</label>
+          <input type="text" id="loginUsername" placeholder="输入用户名" maxlength="20">
+          <button id="btnLogin" onclick="doLogin()">登录</button>
+          <p id="loginError" class="error-msg"></p>
+        </div>
+        <!-- 已登录状态 -->
+        <div id="accountProfile" class="account-section" style="display:none">
+          <p id="profileGreeting" class="profile-greeting"></p>
+
+          <div class="profile-field">
+            <label>头像文字（1-3个字符）</label>
+            <input type="text" id="inputAvatarText" maxlength="3" onchange="updateProfile()">
+          </div>
+
+          <div class="profile-field">
+            <label>文字颜色</label>
+            <div class="color-palette" id="textColorPalette"></div>
+          </div>
+
+          <div class="profile-field">
+            <label>边框颜色</label>
+            <div class="color-palette" id="borderColorPalette"></div>
+          </div>
+
+          <button id="btnLogout" class="btn-secondary" onclick="doLogout()">退出登录</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 联机抽屉 ========== -->
+    <div class="drawer-item">
+      <div class="drawer-header" onclick="toggleDrawer('online')">
+        <span>🌐 联机</span>
+        <span class="drawer-arrow">▾</span>
+      </div>
+      <div class="drawer-body" id="drawerOnline">
+        <div id="onlineList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- 主内容区：游戏卡片网格 -->
+  <!-- ============================================================ -->
+  <main id="mainContent">
+    <h2 id="gamesTitle">选择游戏</h2>
+    <div id="gameCards" class="game-grid">
+      <!-- 动态生成游戏卡片 -->
+      <p id="loadingHint">正在加载游戏列表...</p>
+    </div>
+  </main>
+
+  <!-- ============================================================ -->
+  <!-- 房间选择弹窗 -->
+  <!-- ============================================================ -->
+  <div id="roomModalOverlay" class="modal-overlay" style="display:none">
+    <div id="roomModal" class="modal">
+      <h3 id="roomModalTitle">选择房间</h3>
+      <div id="roomList"></div>
+      <div class="modal-buttons">
+        <button id="btnCreateRoom" class="btn-primary">创建新房间</button>
+        <button id="btnCloseRoom" class="btn-secondary" onclick="closeRoomModal()">返回大厅</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- 游戏界面容器（iframe） -->
+  <!-- ============================================================ -->
+  <div id="gameContainer" style="display:none">
+    <iframe id="gameIframe" src="" frameborder="0" allowfullscreen></iframe>
+    <button id="btnLeaveGame" onclick="leaveGame()">离开游戏</button>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- 底部信息栏 -->
+  <!-- ============================================================ -->
+  <footer id="bottomBar">
+    <span id="serverInfo">服务器地址：加载中...</span>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
