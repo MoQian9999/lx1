@@ -91,12 +91,17 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 canvas#boardCanvas {
   border-radius: 6px;
   box-shadow: 0 4px 24px rgba(0,0,0,0.5);
   cursor: pointer;
+  max-width: 100%;
+  height: auto;
+  touch-action: manipulation;
 }
 
 /* 等待提示 */
@@ -169,4 +174,97 @@ canvas#boardCanvas {
 }
 #btnSurrender.show {
   display: inline-block;
+}
+
+/* ---------- 响应式 ---------- */
+
+/* 平板 / 手机横屏 */
+@media (max-width: 640px) {
+  body {
+    padding: 8px;
+  }
+  .game-header {
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .player-info {
+    padding: 6px 10px;
+    gap: 6px;
+  }
+  .player-avatar {
+    width: 34px;
+    height: 34px;
+    font-size: 13px;
+  }
+  .player-name {
+    font-size: 12px;
+  }
+  .player-stone {
+    width: 16px;
+    height: 16px;
+  }
+  .vs-text {
+    font-size: 16px;
+  }
+  #waitingText {
+    font-size: 16px;
+  }
+  .game-footer {
+    margin-top: 8px;
+    gap: 8px;
+  }
+  #statusText {
+    font-size: 12px;
+  }
+}
+
+/* 手机竖屏 */
+@media (max-width: 420px) {
+  body {
+    padding: 4px;
+    justify-content: flex-start;
+    padding-top: 8px;
+  }
+  .game-header {
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .player-info {
+    padding: 4px 8px;
+    gap: 4px;
+  }
+  .player-avatar {
+    width: 28px;
+    height: 28px;
+    font-size: 11px;
+  }
+  .player-name {
+    font-size: 11px;
+  }
+  .player-stone {
+    width: 14px;
+    height: 14px;
+  }
+  .vs-text {
+    font-size: 14px;
+  }
+  #waitingText {
+    font-size: 14px;
+  }
+  .game-footer {
+    margin-top: 6px;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  #statusText {
+    font-size: 11px;
+    width: 100%;
+    text-align: center;
+  }
+  #btnSurrender,
+  #btnPlayAgain {
+    font-size: 12px;
+    padding: 6px 14px;
+  }
 }
