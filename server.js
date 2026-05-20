@@ -21,7 +21,38 @@ const PORT = parseInt(portArg) || 3000;
 // Express 应用：托管 public 文件夹 + API 接口
 // ============================================================
 const app = express();
-app.use(express.static(path.join(__dirname, "public")));
+
+// 判断是否运行在打包模式（有嵌入的 public 资源）
+if (global.__EMBEDDED_PUBLIC__) {
+  // SEA 打包模式：从内存中服务 public/ 文件
+  const embedded = global.__EMBEDDED_PUBLIC__;
+  app.use((req, res, next) => {
+    // 仅处理根路径下的静态文件请求（/index.html, /style.css, /script.js）
+    let filePath = req.path;
+    if (filePath === "/") filePath = "/index.html";
+    const content = embedded[filePath];
+    if (content) {
+      const ext = filePath.split(".").pop();
+      const mimeTypes = {
+        html: "text/html; charset=utf-8",
+        css: "text/css; charset=utf-8",
+        js: "application/javascript; charset=utf-8",
+        svg: "image/svg+xml",
+        png: "image/png",
+        ico: "image/x-icon",
+      };
+      res.setHeader("Content-Type", mimeTypes[ext] || "application/octet-stream");
+      // base64 编码的内容需要解码
+      const body = content._base64 ? Buffer.from(content.data, "base64") : content;
+      res.send(body);
+    } else {
+      next();
+    }
+  });
+} else {
+  // 源码模式：从文件系统托管 public 文件夹
+  app.use(express.static(path.join(__dirname, "public")));
+}
 
 // 同时托管 box 目录，方便游戏文件被加载
 // 游戏 HTML 通过 /box/游戏名/game.html 访问

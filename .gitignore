@@ -7,6 +7,8 @@ node_modules/
 dist/
 build/
 out/
+release/
+scripts/_embedded_assets.js
 *.tsbuildinfo
 
 # IDE & Editor
