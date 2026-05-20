@@ -45,10 +45,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!msg || !msg.type) return;
 
     if (msg.type === "game_ready") {
-      // iframe 加载完成，转发暂存的消息
+      // iframe 加载完成，标记就绪并转发暂存消息
+      window._iframeReady = true;
       if (pendingGameMessages.length > 0) {
         for (const m of pendingGameMessages) {
-          notifyGameIframe(m);
+          const iframe = document.getElementById("gameIframe");
+          if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.postMessage(m, "*");
+          }
         }
         pendingGameMessages = [];
       }
@@ -213,10 +217,11 @@ let pendingGameMessages = [];
 // ============================================================
 function notifyGameIframe(msg) {
   const iframe = document.getElementById("gameIframe");
-  if (iframe && iframe.contentWindow) {
+  // 只有 iframe 发送 game_ready 后才认为就绪，避免 postMessage 到未加载完的页面
+  if (iframe && window._iframeReady) {
     iframe.contentWindow.postMessage(msg, "*");
   } else {
-    // iframe 尚未加载，暂存消息
+    // iframe 尚未就绪，暂存消息，等 game_ready 后刷新
     pendingGameMessages.push(msg);
   }
 }
@@ -344,12 +349,12 @@ function updateUserBlock(profile) {
   const block = document.getElementById("userBlock");
   const textEl = document.getElementById("userBlockText");
   if (!profile) {
+    textEl.style.color = "var(--gray)";
     block.style.borderColor = "var(--gray)";
-    block.style.color = "var(--gray)";
     textEl.textContent = "user";
   } else {
+    textEl.style.color = profile.textColor;
     block.style.borderColor = profile.borderColor;
-    block.style.color = profile.textColor;
     textEl.textContent = profile.avatarText;
   }
 }
@@ -528,6 +533,7 @@ function enterGame(roomId, gameName) {
     "&textColor=" + encodeURIComponent(currentProfile.textColor) +
     "&borderColor=" + encodeURIComponent(currentProfile.borderColor);
   iframe.src = gameUrl;
+  window._iframeReady = false;
 }
 
 // ============================================================
@@ -545,6 +551,7 @@ function exitGameUI() {
   const iframe = document.getElementById("gameIframe");
   iframe.src = "";
   pendingGameMessages = [];
+  window._iframeReady = false;
 }
 
 // ============================================================

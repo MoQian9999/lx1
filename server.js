@@ -9,13 +9,14 @@ const { WebSocketServer } = require("ws");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const readline = require("readline");
 
 // ============================================================
 // 命令行参数解析：获取端口号
 // ============================================================
 const args = process.argv.slice(2);
 const portArg = args.find(a => !a.startsWith("--"));
-const PORT = parseInt(portArg) || 3000;
+let PORT = parseInt(portArg) || null; // null 表示需要交互式输入
 
 // ============================================================
 // Express 应用：托管 public 文件夹 + API 接口
@@ -96,6 +97,12 @@ const server = http.createServer(app);
 // WebSocket 服务
 // ============================================================
 const wss = new WebSocketServer({ server });
+// 处理 ws 库从 HTTP server 转发的错误（如端口占用），避免 unhandled error
+wss.on("error", (err) => {
+  if (err.code !== "EADDRINUSE") {
+    console.error("WebSocket 错误:", err.message);
+  }
+});
 
 // ---------- 内存数据 ----------
 // 在线用户列表：Map<username, { ws, avatarText, textColor, borderColor, currentRoom, currentGame }>
@@ -518,10 +525,9 @@ setInterval(() => {
 }, 30000);
 
 // ============================================================
-// 启动服务器
+// 启动服务器（支持交互式端口输入）
 // ============================================================
-server.listen(PORT, () => {
-  // 获取本机局域网 IP
+function getLocalIP() {
   const interfaces = os.networkInterfaces();
   let localIP = "127.0.0.1";
   for (const iface of Object.values(interfaces)) {
@@ -533,21 +539,96 @@ server.listen(PORT, () => {
     }
     if (localIP !== "127.0.0.1") break;
   }
+  return localIP;
+}
 
+function showBanner(port) {
+  const ip = getLocalIP();
   console.log("========================================");
   console.log("  桌游集合 - 服务器已启动");
-  console.log("  访问地址：http://" + localIP + ":" + PORT);
-  console.log("  本机访问：http://localhost:" + PORT);
+  console.log("  访问地址：http://" + ip + ":" + port);
+  console.log("  本机访问：http://localhost:" + port);
   console.log("========================================");
-});
+}
 
-// 服务器错误处理（端口占用等）
-server.on("error", (err) => {
-  if (err.code === "EADDRINUSE") {
-    console.error("端口 " + PORT + " 已被占用，请更换一个端口");
-    process.exit(1);
-  } else {
-    console.error("服务器启动失败:", err.message);
-    process.exit(1);
+function tryStartServer(port) {
+  return new Promise((resolve, reject) => {
+    server.once("error", (err) => {
+      if (err.code === "EADDRINUSE") {
+        reject(new Error("EADDRINUSE"));
+      } else {
+        reject(err);
+      }
+    });
+    server.listen(port, () => {
+      // 移除一次性错误监听，换上常驻错误处理
+      server.removeAllListeners("error");
+      server.on("error", (err) => {
+        console.error("服务器运行时错误:", err.message);
+      });
+      resolve();
+    });
+  });
+}
+
+// 交互式端口输入
+async function promptPort() {
+  // 已有命令行参数，直接使用
+  if (PORT !== null) {
+    try {
+      await tryStartServer(PORT);
+      showBanner(PORT);
+      return;
+    } catch (err) {
+      if (err.message === "EADDRINUSE") {
+        console.error("端口 " + PORT + " 已被占用，请更换一个端口");
+        process.exit(1);
+      } else {
+        console.error("服务器启动失败:", err.message);
+        process.exit(1);
+      }
+    }
   }
-});
+
+  // 无命令行参数，交互式输入
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  console.log("========================================");
+  console.log("  桌游集合 - 局域网联机桌游平台");
+  console.log("========================================");
+  console.log("");
+
+  const askPort = () => {
+    return new Promise((resolve) => {
+      rl.question("请输入要使用的端口号（直接回车则默认使用 3000）：", (answer) => {
+        resolve(answer);
+      });
+    });
+  };
+
+  while (true) {
+    const answer = await askPort();
+    const port = parseInt(answer) || 3000;
+
+    try {
+      await tryStartServer(port);
+      rl.close();
+      showBanner(port);
+      return;
+    } catch (err) {
+      if (err.message === "EADDRINUSE") {
+        console.log("端口 " + port + " 已被占用，请更换一个端口");
+        console.log("");
+      } else {
+        console.error("服务器启动失败:", err.message);
+        rl.close();
+        process.exit(1);
+      }
+    }
+  }
+}
+
+promptPort();
