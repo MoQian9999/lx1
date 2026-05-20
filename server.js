@@ -529,17 +529,29 @@ setInterval(() => {
 // ============================================================
 function getLocalIP() {
   const interfaces = os.networkInterfaces();
-  let localIP = "127.0.0.1";
-  for (const iface of Object.values(interfaces)) {
-    for (const addr of iface) {
+  // VPN/虚拟网卡关键字（英文+中文），这些 IP 对外不可达
+  const skipKeywords = ["vpn", "virtual", "radmin", "vethernet", "hamachi",
+    "tunnel", "pseudo", "loopback", "hyper-v", "虚拟", "vpn"];
+  let bestIP = "127.0.0.1";
+  for (const [name, addrs] of Object.entries(interfaces)) {
+    const lowName = name.toLowerCase();
+    if (skipKeywords.some(k => lowName.includes(k))) continue;
+    for (const addr of addrs) {
       if (addr.family === "IPv4" && !addr.internal) {
-        localIP = addr.address;
-        break;
+        bestIP = addr.address;
+        return bestIP; // 找到第一个真实网卡就返回
       }
     }
-    if (localIP !== "127.0.0.1") break;
   }
-  return localIP;
+  // 回退：如果全部被过滤，取第一个非内部 IPv4
+  if (bestIP === "127.0.0.1") {
+    for (const addrs of Object.values(interfaces)) {
+      for (const addr of addrs) {
+        if (addr.family === "IPv4" && !addr.internal) return addr.address;
+      }
+    }
+  }
+  return bestIP;
 }
 
 function showBanner(port) {
