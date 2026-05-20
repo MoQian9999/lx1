@@ -18,6 +18,9 @@ let myTurn = false;           // 是否轮到我
 let board = [];               // 棋盘状态：null / "black" / "white"
 let gameOver = false;         // 游戏是否已结束
 let gameStarted = false;      // 游戏是否已开始
+let lastMoveRow = -1;         // 最后落子行（用于高亮标记）
+let lastMoveCol = -1;         // 最后落子列
+let thisGameName = "五子棋";   // 游戏名（从 URL 参数获取）
 let canvas = null;
 let ctx = null;
 let roomId = null;
@@ -32,6 +35,7 @@ function init() {
   // 从 URL 参数读取信息
   const params = new URLSearchParams(window.location.search);
   roomId = params.get("roomId");
+  thisGameName = params.get("gameName") || "五子棋";
   myInfo = {
     username: params.get("username"),
     avatarText: params.get("avatarText"),
@@ -79,6 +83,8 @@ function resetBoard() {
   gameStarted = false;
   currentTurn = null;
   myTurn = false;
+  lastMoveRow = -1;
+  lastMoveCol = -1;
 }
 
 // ============================================================
@@ -166,6 +172,26 @@ function drawStone(row, col, color) {
 }
 
 // ============================================================
+// 在最后落子处绘制标记
+// ============================================================
+function drawLastMoveMark() {
+  if (lastMoveRow < 0 || lastMoveCol < 0) return;
+  const x = PADDING + lastMoveCol * CELL_SIZE;
+  const y = PADDING + lastMoveRow * CELL_SIZE;
+
+  // 红色圆点标记
+  ctx.beginPath();
+  ctx.arc(x, y, 3, 0, Math.PI * 2);
+  ctx.fillStyle = "#ff4444";
+  ctx.fill();
+
+  // 白色细边框让标记在黑白子上都可见
+  ctx.strokeStyle = "rgba(255,255,255,0.7)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+// ============================================================
 // 处理棋盘点击
 // ============================================================
 function onCanvasClick(e) {
@@ -202,7 +228,9 @@ function onCanvasClick(e) {
     gameOver = true;
     document.getElementById("statusText").textContent = "你赢了！";
     document.getElementById("btnPlayAgain").classList.add("show");
+    document.getElementById("btnSurrender").classList.remove("show");
     hideTurnHighlight();
+    sendToParent({ type: "game_over", gameName: thisGameName, result: "win", isDraw: false });
     return;
   }
 
@@ -211,7 +239,9 @@ function onCanvasClick(e) {
     gameOver = true;
     document.getElementById("statusText").textContent = "平局！";
     document.getElementById("btnPlayAgain").classList.add("show");
+    document.getElementById("btnSurrender").classList.remove("show");
     hideTurnHighlight();
+    sendToParent({ type: "game_over", gameName: thisGameName, result: "draw", isDraw: true });
     return;
   }
 
@@ -226,7 +256,10 @@ function onCanvasClick(e) {
 // ============================================================
 function placeStone(row, col, color) {
   board[row][col] = color;
+  lastMoveRow = row;
+  lastMoveCol = col;
   drawBoard(); // 重绘整个棋盘（含新棋子）
+  drawLastMoveMark(); // 在最后落子上绘制标记
 }
 
 // ============================================================
@@ -331,6 +364,7 @@ function handleGameStart(msg) {
   gameOver = false;
   hideWaiting();
   document.getElementById("btnPlayAgain").classList.remove("show");
+  document.getElementById("btnSurrender").classList.add("show");
 
   // 确定对手信息
   for (const p of msg.players) {
@@ -369,6 +403,7 @@ function handleGameAction(msg) {
       gameOver = true;
       document.getElementById("statusText").textContent = "对手获胜！";
       document.getElementById("btnPlayAgain").classList.add("show");
+      document.getElementById("btnSurrender").classList.remove("show");
       hideTurnHighlight();
       return;
     }
@@ -377,6 +412,7 @@ function handleGameAction(msg) {
       gameOver = true;
       document.getElementById("statusText").textContent = "平局！";
       document.getElementById("btnPlayAgain").classList.add("show");
+      document.getElementById("btnSurrender").classList.remove("show");
       hideTurnHighlight();
       return;
     }
@@ -387,6 +423,14 @@ function handleGameAction(msg) {
     updateTurnDisplay();
     document.getElementById("statusText").textContent = "轮到你了（" +
       (myColor === "black" ? "黑棋" : "白棋") + "）";
+  } else if (msg.action === "surrender") {
+    // 对手认输
+    gameOver = true;
+    myTurn = false;
+    hideTurnHighlight();
+    document.getElementById("statusText").textContent = "对手认输，你赢了！";
+    document.getElementById("btnPlayAgain").classList.add("show");
+    document.getElementById("btnSurrender").classList.remove("show");
   } else if (msg.action === "player_left") {
     // 对手离开
     gameStarted = false;
@@ -394,6 +438,7 @@ function handleGameAction(msg) {
     showWaiting("对手离开了房间");
     document.getElementById("statusText").textContent = "对手断线";
     document.getElementById("btnPlayAgain").classList.remove("show");
+    document.getElementById("btnSurrender").classList.remove("show");
   }
 }
 
@@ -468,12 +513,32 @@ function sendToParent(msg) {
 // 再来一局
 // ============================================================
 function playAgain() {
-  // 向服务器请求再来一局，交换先后手
-  sendToParent({
-    type: "play_again",
-    firstTurn: opponentInfo ? opponentInfo.username : myInfo.username,
-  });
+  sendToParent({ type: "play_again" });
   document.getElementById("btnPlayAgain").classList.remove("show");
+  document.getElementById("btnSurrender").classList.remove("show");
+}
+
+// ============================================================
+// 认输
+// ============================================================
+function surrender() {
+  if (!gameStarted || gameOver) return;
+
+  gameOver = true;
+  myTurn = false;
+  hideTurnHighlight();
+
+  sendToParent({
+    type: "game_action",
+    action: "surrender",
+    data: {},
+  });
+
+  document.getElementById("statusText").textContent = "你认输了";
+  document.getElementById("btnPlayAgain").classList.add("show");
+  document.getElementById("btnSurrender").classList.remove("show");
+
+  sendToParent({ type: "game_over", gameName: thisGameName, result: "loss", isDraw: false });
 }
 
 // ============================================================

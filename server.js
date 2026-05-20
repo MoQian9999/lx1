@@ -109,6 +109,8 @@ wss.on("error", (err) => {
 const users = new Map();
 // 房间列表：Map<roomId, { id, gameName, players: [], maxPlayers, status }>
 const rooms = new Map();
+// 战绩统计：Map<gameName, Map<username, { wins, losses, draws }>>
+const gameStats = new Map();
 
 // 生成唯一房间 ID
 let roomIdCounter = 0;
@@ -149,6 +151,43 @@ function broadcastToRoom(roomId, msg) {
     const u = users.get(player.username);
     if (u && u.ws.readyState === 1) {
       u.ws.send(data);
+    }
+  }
+}
+
+// ============================================================
+// 工具函数：记录游戏结果并广播战绩
+// ============================================================
+function recordGameResult(gameName, username, result) {
+  if (!gameStats.has(gameName)) {
+    gameStats.set(gameName, new Map());
+  }
+  const stat = gameStats.get(gameName);
+  if (!stat.has(username)) {
+    stat.set(username, { wins: 0, losses: 0, draws: 0 });
+  }
+  const record = stat.get(username);
+  if (result === "win") record.wins++;
+  else if (result === "loss") record.losses++;
+  else if (result === "draw") record.draws++;
+}
+
+function broadcastStats(gameName) {
+  const stat = gameStats.get(gameName);
+  if (!stat) return;
+  const statsArray = [];
+  for (const [username, record] of stat) {
+    statsArray.push({
+      username,
+      wins: record.wins,
+      losses: record.losses,
+      draws: record.draws,
+    });
+  }
+  const msg = JSON.stringify({ type: "stats_update", gameName, stats: statsArray });
+  for (const [, u] of users) {
+    if (u.ws.readyState === 1) {
+      u.ws.send(msg);
     }
   }
 }
@@ -419,6 +458,7 @@ wss.on("connection", (ws) => {
         // 如果人数已满，自动开始游戏
         if (room.players.length >= room.maxPlayers) {
           room.status = "playing";
+          room._statsRecorded = false;
           // 随机决定先手
           const firstPlayerIndex = Math.floor(Math.random() * room.players.length);
           broadcastToRoom(room.id, {
@@ -482,7 +522,10 @@ wss.on("connection", (ws) => {
         const room = rooms.get(u.currentRoom);
         if (!room) return;
 
-        // 切换先手：交换先后手
+        // 新一局开始，重置战绩记录标记
+        room._statsRecorded = false;
+        // 随机决定先手（公平，忽略客户端建议）
+        const firstPlayerIndex = Math.floor(Math.random() * room.players.length);
         broadcastToRoom(room.id, {
           type: "game_start",
           roomId: room.id,
@@ -492,8 +535,67 @@ wss.on("connection", (ws) => {
             textColor: p.textColor,
             borderColor: p.borderColor,
           })),
-          firstTurn: msg.firstTurn || room.players[0].username,
+          firstTurn: room.players[firstPlayerIndex].username,
         });
+        break;
+      }
+
+      // ---------- 游戏结束（战绩记录）----------
+      case "game_over": {
+        if (!currentUsername) return;
+        const u = users.get(currentUsername);
+        if (!u || !u.currentRoom) return;
+        const room = rooms.get(u.currentRoom);
+        if (!room) return;
+
+        // 防止同一局重复记录
+        if (room._statsRecorded) return;
+        room._statsRecorded = true;
+
+        const gameName = msg.gameName;
+
+        if (msg.isDraw) {
+          for (const player of room.players) {
+            recordGameResult(gameName, player.username, "draw");
+          }
+        } else if (msg.result === "win") {
+          recordGameResult(gameName, currentUsername, "win");
+          for (const player of room.players) {
+            if (player.username !== currentUsername) {
+              recordGameResult(gameName, player.username, "loss");
+            }
+          }
+        } else if (msg.result === "loss") {
+          recordGameResult(gameName, currentUsername, "loss");
+          for (const player of room.players) {
+            if (player.username !== currentUsername) {
+              recordGameResult(gameName, player.username, "win");
+            }
+          }
+        }
+
+        broadcastStats(gameName);
+        break;
+      }
+
+      // ---------- 查询战绩 ----------
+      case "get_stats": {
+        const gameName = msg.gameName;
+        if (gameName && gameStats.has(gameName)) {
+          const stat = gameStats.get(gameName);
+          const statsArray = [];
+          for (const [username, record] of stat) {
+            statsArray.push({
+              username,
+              wins: record.wins,
+              losses: record.losses,
+              draws: record.draws,
+            });
+          }
+          ws.send(JSON.stringify({ type: "stats_update", gameName, stats: statsArray }));
+        } else if (gameName) {
+          ws.send(JSON.stringify({ type: "stats_update", gameName, stats: [] }));
+        }
         break;
       }
 

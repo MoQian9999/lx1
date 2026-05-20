@@ -151,3 +151,22 @@ canvas#boardCanvas {
 #btnPlayAgain.show {
   display: inline-block;
 }
+
+#btnSurrender {
+  display: none;
+  padding: 8px 20px;
+  border: none;
+  border-radius: 6px;
+  background: #555;
+  color: #ccc;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+  min-height: 44px;
+}
+#btnSurrender:hover {
+  background: #777;
+}
+#btnSurrender.show {
+  display: inline-block;
+}

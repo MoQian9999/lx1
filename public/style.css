@@ -456,19 +456,176 @@ button:active {
   color: var(--textDim);
 }
 
+/* ---------- 触控优化 ---------- */
+button, .game-card, .color-swatch, .drawer-header, .user-block, .room-item {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+button {
+  min-height: 44px;
+  min-width: 44px;
+}
+.color-swatch {
+  width: 40px;
+  height: 40px;
+}
+.room-item button {
+  min-height: 40px;
+  padding: 8px 16px;
+}
+
+/* ---------- 战绩面板 ---------- */
+.game-card-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-stats-toggle {
+  padding: 4px 12px;
+  font-size: 12px;
+  background: var(--surface2);
+  color: var(--textDim);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  min-height: 28px;
+  min-width: 44px;
+  transition: background 0.2s, color 0.2s;
+}
+.btn-stats-toggle:hover {
+  background: #1a4a7a;
+  color: var(--text);
+}
+
+.stats-panel {
+  width: 100%;
+  max-height: 200px;
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 10px;
+  margin-top: 4px;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.stats-empty {
+  text-align: center;
+  color: var(--textDim);
+  font-size: 12px;
+  padding: 8px;
+}
+
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.stats-table th,
+.stats-table td {
+  padding: 4px 6px;
+  text-align: center;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.stats-table th {
+  color: var(--textDim);
+  font-weight: normal;
+  font-size: 11px;
+}
+.stats-table td {
+  color: var(--text);
+}
+.stats-table tbody tr:hover {
+  background: rgba(255,255,255,0.03);
+}
+
 /* ---------- 响应式 ---------- */
+
+/* 平板 / 小屏笔记本 */
+@media (max-width: 768px) {
+  #topBar {
+    padding: 10px 14px;
+  }
+  #topTitle {
+    font-size: 17px;
+  }
+  #mainContent {
+    padding: 20px 14px;
+  }
+}
+
+/* 手机横屏 */
 @media (max-width: 600px) {
   .game-grid {
     grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
+    gap: 10px;
   }
   .game-card {
-    padding: 18px 10px;
+    padding: 16px 8px;
   }
   .game-card .game-emoji {
     font-size: 32px;
   }
+  .game-card .game-name {
+    font-size: 14px;
+  }
   .sidebar {
     width: 280px;
+    left: -300px;
+  }
+  .modal {
+    min-width: unset;
+    padding: 20px;
+  }
+}
+
+/* 手机竖屏 */
+@media (max-width: 420px) {
+  .game-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .game-card {
+    padding: 20px 10px;
+    min-height: 100px;
+  }
+  .game-card .game-emoji {
+    font-size: 36px;
+  }
+  .sidebar {
+    width: 100vw;
+    max-width: 320px;
+    left: -100vw;
+  }
+  #topBar {
+    padding: 8px 10px;
+  }
+  #topTitle {
+    font-size: 15px;
+    letter-spacing: 1px;
+  }
+  .user-block {
+    width: 40px;
+    height: 40px;
+  }
+  .user-block span {
+    font-size: 15px;
+    max-width: 34px;
+  }
+  .modal {
+    padding: 16px;
+    gap: 12px;
+  }
+  .stats-table {
+    font-size: 11px;
+  }
+  .stats-table th,
+  .stats-table td {
+    padding: 3px 4px;
+  }
+  .stats-panel {
+    max-height: 150px;
+    padding: 8px;
   }
 }

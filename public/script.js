@@ -56,7 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         pendingGameMessages = [];
       }
-    } else if (msg.type === "game_action" || msg.type === "play_again") {
+    } else if (msg.type === "game_action" || msg.type === "play_again" || msg.type === "game_over") {
       // 将游戏 iframe 的操作转发到服务器
       sendMessage(msg);
     }
@@ -201,6 +201,12 @@ function handleMessage(msg) {
 
     case "room_left":
       exitGameUI();
+      break;
+
+    case "stats_update":
+      if (!window._gameStats) window._gameStats = {};
+      window._gameStats[msg.gameName] = msg.stats;
+      refreshStatsDisplay(msg.gameName);
       break;
 
     case "error":
@@ -410,6 +416,9 @@ function renderGameCards() {
     return;
   }
   for (const game of games) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "game-card-wrapper";
+
     const card = document.createElement("div");
     card.className = "game-card";
     card.onclick = () => onGameClick(game);
@@ -417,8 +426,74 @@ function renderGameCards() {
       '<span class="game-emoji">' + game.emoji + '</span>' +
       '<div class="game-name">' + game.name + '</div>' +
       '<div class="game-players">' + game.minPlayers + '-' + game.maxPlayers + '人</div>';
-    container.appendChild(card);
+    wrapper.appendChild(card);
+
+    // 战绩按钮
+    const toggleBtn = document.createElement("button");
+    toggleBtn.className = "btn-stats-toggle";
+    toggleBtn.textContent = "战绩";
+    toggleBtn.onclick = (e) => { e.stopPropagation(); toggleStats(game.id); };
+    wrapper.appendChild(toggleBtn);
+
+    // 战绩面板（默认隐藏）
+    const statsPanel = document.createElement("div");
+    statsPanel.id = "statsPanel_" + game.id;
+    statsPanel.className = "stats-panel";
+    statsPanel.style.display = "none";
+    statsPanel.innerHTML = '<p class="stats-empty">加载中...</p>';
+    wrapper.appendChild(statsPanel);
+
+    container.appendChild(wrapper);
   }
+}
+
+// ============================================================
+// 请求战绩数据
+// ============================================================
+function requestStats(gameName) {
+  sendMessage({ type: "get_stats", gameName: gameName });
+}
+
+function toggleStats(gameName) {
+  const panel = document.getElementById("statsPanel_" + gameName);
+  if (!panel) return;
+  if (panel.style.display === "none") {
+    requestStats(gameName);
+    panel.style.display = "block";
+  } else {
+    panel.style.display = "none";
+  }
+}
+
+function refreshStatsDisplay(gameName) {
+  const panel = document.getElementById("statsPanel_" + gameName);
+  if (!panel || panel.style.display === "none") return;
+  const stats = (window._gameStats && window._gameStats[gameName]) || [];
+  renderStatsTable(panel, stats);
+}
+
+function renderStatsTable(container, stats) {
+  if (!stats || stats.length === 0) {
+    container.innerHTML = '<p class="stats-empty">暂无战绩数据</p>';
+    return;
+  }
+  const sorted = [...stats].sort((a, b) => b.wins - a.wins);
+  let html = '<table class="stats-table"><thead><tr>' +
+    '<th>玩家</th><th>胜</th><th>负</th><th>平</th><th>胜率</th>' +
+    '</tr></thead><tbody>';
+  for (const s of sorted) {
+    const total = s.wins + s.losses + s.draws;
+    const rate = total > 0 ? Math.round((s.wins / total) * 100) : 0;
+    html += '<tr>' +
+      '<td>' + s.username + '</td>' +
+      '<td>' + s.wins + '</td>' +
+      '<td>' + s.losses + '</td>' +
+      '<td>' + s.draws + '</td>' +
+      '<td>' + rate + '%</td>' +
+      '</tr>';
+  }
+  html += '</tbody></table>';
+  container.innerHTML = html;
 }
 
 // ============================================================
@@ -528,6 +603,7 @@ function enterGame(roomId, gameName) {
   // 通过 URL 参数传递房间 ID 和用户信息，让游戏页面拿到上下文
   const gameUrl = "/box/" + encodeURIComponent(gameName) + "/game.html" +
     "?roomId=" + encodeURIComponent(roomId) +
+    "&gameName=" + encodeURIComponent(gameName) +
     "&username=" + encodeURIComponent(currentUser) +
     "&avatarText=" + encodeURIComponent(currentProfile.avatarText) +
     "&textColor=" + encodeURIComponent(currentProfile.textColor) +
