@@ -500,6 +500,7 @@ function handleGameAction(msg) {
     }, 1500);
   } else if (msg.action === "nudge") {
     // 对手提醒
+    showNudgeToast();
     const el = document.getElementById("statusText");
     el.textContent = "对手提醒你落子";
     el.style.color = "#f1c40f";
@@ -738,16 +739,23 @@ function performUndo(undoTwoStones) {
   drawBoard();
   if (lastMoveRow >= 0) drawLastMoveMark();
 
-  // 请求方始终拿回回合
-  myTurn = true;
-  currentTurn = myInfo.username;
+  // 撤2子回合不变（请求方本来就是当前回合），撤1子回合翻转
+  if (!undoTwoStones) {
+    myTurn = !myTurn;
+  }
+  currentTurn = myTurn ? myInfo.username : opponentInfo.username;
   nudgeSent = false;
   pendingUndoRequest = false;
   updateTurnDisplay();
   document.getElementById("btnUndo").classList.add("show");
-  document.getElementById("btnNudge").classList.remove("show");
+  if (myTurn) {
+    document.getElementById("btnNudge").classList.remove("show");
+    document.getElementById("statusText").textContent = "悔棋成功，轮到你了";
+  } else {
+    document.getElementById("btnNudge").classList.add("show");
+    document.getElementById("statusText").textContent = "等待对手落子...";
+  }
   startMoveTimer();
-  document.getElementById("statusText").textContent = "悔棋成功，轮到你了";
 }
 
 // ============================================================
@@ -764,6 +772,28 @@ function nudgeOpponent() {
       document.getElementById("statusText").textContent = "等待对手落子...";
     }
   }, 1500);
+}
+
+// ============================================================
+// 提醒提示弹层
+// ============================================================
+function showNudgeToast() {
+  const wrapper = document.getElementById("boardWrapper") || document.querySelector(".board-wrapper");
+  if (!wrapper) return;
+
+  let toast = document.getElementById("nudgeToast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "nudgeToast";
+    toast.className = "nudge-toast";
+    toast.textContent = "对手提醒你落子！";
+    wrapper.appendChild(toast);
+  }
+
+  toast.classList.add("show");
+  setTimeout(() => {
+    toast.classList.remove("show");
+  }, 2000);
 }
 
 // ============================================================

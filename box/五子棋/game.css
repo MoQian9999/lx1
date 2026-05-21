@@ -207,6 +207,33 @@ canvas#boardCanvas {
   to { opacity: 0.4; }
 }
 
+/* 提醒提示弹层 */
+.nudge-toast {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  background: rgba(0, 0, 0, 0.75);
+  color: #f1c40f;
+  font-size: 28px;
+  font-weight: bold;
+  padding: 24px 36px;
+  border-radius: 12px;
+  z-index: 10;
+  pointer-events: none;
+  white-space: nowrap;
+  text-shadow: 0 0 12px rgba(241, 196, 15, 0.6);
+  transition: transform 0.3s ease;
+}
+.nudge-toast.show {
+  transform: translate(-50%, -50%) scale(1);
+  animation: nudgePulse 0.6s ease-in-out 2;
+}
+@keyframes nudgePulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  50% { transform: translate(-50%, -50%) scale(1.08); }
+}
+
 /* 底部操作区 */
 .game-footer {
   margin-top: 12px;
@@ -338,6 +365,10 @@ canvas#boardCanvas {
     padding: 3px 12px;
     min-width: 60px;
   }
+  .nudge-toast {
+    font-size: 22px;
+    padding: 18px 28px;
+  }
   .game-footer {
     margin-top: 8px;
     gap: 8px;
@@ -396,6 +427,10 @@ canvas#boardCanvas {
     font-size: 16px;
     padding: 2px 10px;
     min-width: 54px;
+  }
+  .nudge-toast {
+    font-size: 18px;
+    padding: 14px 22px;
   }
   .game-footer {
     margin-top: 6px;
