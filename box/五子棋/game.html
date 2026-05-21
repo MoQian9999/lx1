@@ -27,6 +27,11 @@
     </div>
   </div>
 
+  <!-- ========== 计时器 ========== -->
+  <div id="timerDisplay">
+    <span id="moveTimer">60s</span>
+  </div>
+
   <!-- ========== 棋盘 ========== -->
   <div class="board-wrapper">
     <canvas id="boardCanvas"></canvas>
@@ -34,11 +39,21 @@
     <div id="waitingOverlay">
       <span id="waitingText">等待对手加入...</span>
     </div>
+    <!-- 悔棋请求遮罩 -->
+    <div id="undoOverlay" class="hidden">
+      <p class="undo-text">对手请求悔棋</p>
+      <div class="undo-buttons">
+        <button onclick="acceptUndo()">同意</button>
+        <button onclick="rejectUndo()">拒绝</button>
+      </div>
+    </div>
   </div>
 
   <!-- ========== 底部状态与按钮 ========== -->
   <div class="game-footer">
     <span id="statusText"></span>
+    <button id="btnUndo" onclick="requestUndo()">悔棋</button>
+    <button id="btnNudge" onclick="nudgeOpponent()">提醒</button>
     <button id="btnSurrender" onclick="surrender()">认输</button>
     <button id="btnPlayAgain" onclick="playAgain()">再来一局</button>
   </div>

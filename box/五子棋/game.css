@@ -128,6 +128,85 @@ canvas#boardCanvas {
   text-align: center;
 }
 
+/* 悔棋请求遮罩 */
+#undoOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.65);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  border-radius: 6px;
+  z-index: 6;
+}
+#undoOverlay.hidden {
+  display: none;
+}
+.undo-text {
+  font-size: 20px;
+  color: #fff;
+  text-align: center;
+}
+.undo-buttons {
+  display: flex;
+  gap: 16px;
+}
+.undo-buttons button {
+  padding: 10px 24px;
+  border: none;
+  border-radius: 6px;
+  font-size: 15px;
+  cursor: pointer;
+  min-height: 44px;
+  min-width: 80px;
+  transition: background 0.2s;
+}
+.undo-buttons button:first-child {
+  background: #27ae60;
+  color: #fff;
+}
+.undo-buttons button:first-child:hover {
+  background: #219a52;
+}
+.undo-buttons button:last-child {
+  background: #e74c3c;
+  color: #fff;
+}
+.undo-buttons button:last-child:hover {
+  background: #c0392b;
+}
+
+/* 计时器 */
+#timerDisplay {
+  margin-bottom: 8px;
+  text-align: center;
+}
+#moveTimer {
+  font-size: 22px;
+  font-weight: bold;
+  color: #f1c40f;
+  background: #16213e;
+  padding: 4px 16px;
+  border-radius: 6px;
+  display: inline-block;
+  min-width: 70px;
+  transition: color 0.3s, background 0.3s;
+}
+#moveTimer.urgent {
+  color: #e74c3c;
+  background: #2c0a0a;
+  animation: timerBlink 0.5s ease-in-out infinite alternate;
+}
+@keyframes timerBlink {
+  from { opacity: 1; }
+  to { opacity: 0.4; }
+}
+
 /* 底部操作区 */
 .game-footer {
   margin-top: 12px;
@@ -176,6 +255,44 @@ canvas#boardCanvas {
   display: inline-block;
 }
 
+#btnUndo {
+  display: none;
+  padding: 8px 20px;
+  border: none;
+  border-radius: 6px;
+  background: #3498db;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+  min-height: 44px;
+}
+#btnUndo:hover {
+  background: #2980b9;
+}
+#btnUndo.show {
+  display: inline-block;
+}
+
+#btnNudge {
+  display: none;
+  padding: 8px 20px;
+  border: none;
+  border-radius: 6px;
+  background: #f39c12;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+  min-height: 44px;
+}
+#btnNudge:hover {
+  background: #d68910;
+}
+#btnNudge.show {
+  display: inline-block;
+}
+
 /* ---------- 响应式 ---------- */
 
 /* 平板 / 手机横屏 */
@@ -209,12 +326,29 @@ canvas#boardCanvas {
   #waitingText {
     font-size: 16px;
   }
+  .undo-text {
+    font-size: 16px;
+  }
+  .undo-buttons button {
+    font-size: 14px;
+    padding: 8px 20px;
+  }
+  #moveTimer {
+    font-size: 18px;
+    padding: 3px 12px;
+    min-width: 60px;
+  }
   .game-footer {
     margin-top: 8px;
     gap: 8px;
   }
   #statusText {
     font-size: 12px;
+  }
+  #btnUndo,
+  #btnNudge {
+    font-size: 12px;
+    padding: 6px 14px;
   }
 }
 
@@ -251,6 +385,18 @@ canvas#boardCanvas {
   #waitingText {
     font-size: 14px;
   }
+  .undo-text {
+    font-size: 14px;
+  }
+  .undo-buttons button {
+    font-size: 13px;
+    padding: 8px 16px;
+  }
+  #moveTimer {
+    font-size: 16px;
+    padding: 2px 10px;
+    min-width: 54px;
+  }
   .game-footer {
     margin-top: 6px;
     gap: 6px;
@@ -262,6 +408,8 @@ canvas#boardCanvas {
     width: 100%;
     text-align: center;
   }
+  #btnUndo,
+  #btnNudge,
   #btnSurrender,
   #btnPlayAgain {
     font-size: 12px;
