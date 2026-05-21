@@ -424,6 +424,7 @@ function handleGameStart(msg) {
   moveTimeLeft = 60;
   updateTimerDisplay();
   updateScore();
+  drawBoard();
 
   if (myTurn) {
     startMoveTimer();
@@ -454,6 +455,7 @@ function handleGameAction(msg) {
     currentTurn = myInfo.username;
     validMoves = getValidMoves(myColor);
     updateTurnDisplay();
+    drawBoard();
     startMoveTimer();
     document.getElementById("btnSurrender").classList.add("show");
     document.getElementById("statusText").textContent = "轮到你了（" +
@@ -473,6 +475,7 @@ function handleGameAction(msg) {
     currentTurn = myInfo.username;
     validMoves = getValidMoves(myColor);
     updateTurnDisplay();
+    drawBoard();
     startMoveTimer();
     document.getElementById("btnSurrender").classList.add("show");
     document.getElementById("statusText").textContent = "对手无合法位置，轮到你了";
