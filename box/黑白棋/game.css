@@ -1,0 +1,333 @@
+/* ============================================================
+   黑白棋 - 游戏样式
+   ============================================================ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Microsoft YaHei", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 12px;
+  user-select: none;
+}
+
+/* 顶部状态栏 */
+.game-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+/* 对局双方信息 */
+.player-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: #16213e;
+  border: 2px solid transparent;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+.player-info.current-turn {
+  border-color: #f1c40f;
+  box-shadow: 0 0 12px rgba(241, 196, 15, 0.4);
+}
+
+.player-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.player-name {
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.player-stone {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.stone-black {
+  background: radial-gradient(circle at 35% 35%, #555, #111);
+  box-shadow: 0 0 4px rgba(0,0,0,0.5);
+}
+.stone-white {
+  background: radial-gradient(circle at 35% 35%, #fff, #ccc);
+  box-shadow: 0 0 4px rgba(0,0,0,0.3);
+}
+
+.vs-text {
+  font-size: 18px;
+  font-weight: bold;
+  color: #e94560;
+}
+
+/* 分数栏 */
+#scoreDisplay {
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 18px;
+  font-weight: bold;
+}
+#scoreBlack {
+  color: #ddd;
+}
+#scoreWhite {
+  color: #ddd;
+}
+.score-divider {
+  color: #555;
+}
+
+/* 计时器 */
+#timerDisplay {
+  margin-bottom: 8px;
+  text-align: center;
+}
+#moveTimer {
+  font-size: 22px;
+  font-weight: bold;
+  color: #f1c40f;
+  background: #16213e;
+  padding: 4px 16px;
+  border-radius: 6px;
+  display: inline-block;
+  min-width: 70px;
+  transition: color 0.3s, background 0.3s;
+}
+#moveTimer.urgent {
+  color: #e74c3c;
+  background: #2c0a0a;
+  animation: timerBlink 0.5s ease-in-out infinite alternate;
+}
+@keyframes timerBlink {
+  from { opacity: 1; }
+  to { opacity: 0.4; }
+}
+
+/* 棋盘区域 */
+.board-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+canvas#boardCanvas {
+  border-radius: 6px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+  cursor: pointer;
+  max-width: 100%;
+  height: auto;
+  touch-action: manipulation;
+}
+
+/* 等待提示 */
+#waitingOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  z-index: 5;
+}
+#waitingOverlay.hidden {
+  display: none;
+}
+
+#waitingText {
+  font-size: 20px;
+  color: #fff;
+  text-align: center;
+}
+
+/* 底部操作区 */
+.game-footer {
+  margin-top: 12px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+#statusText {
+  font-size: 14px;
+  color: #999;
+}
+#btnPlayAgain {
+  display: none;
+  padding: 8px 20px;
+  border: none;
+  border-radius: 6px;
+  background: #e94560;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+#btnPlayAgain:hover {
+  background: #d63e57;
+}
+#btnPlayAgain.show {
+  display: inline-block;
+}
+
+#btnSurrender {
+  display: none;
+  padding: 8px 20px;
+  border: none;
+  border-radius: 6px;
+  background: #555;
+  color: #ccc;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+  min-height: 44px;
+}
+#btnSurrender:hover {
+  background: #777;
+}
+#btnSurrender.show {
+  display: inline-block;
+}
+
+/* ---------- 响应式 ---------- */
+
+/* 平板 / 手机横屏 */
+@media (max-width: 640px) {
+  body {
+    padding: 8px;
+  }
+  .game-header {
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .player-info {
+    padding: 6px 10px;
+    gap: 6px;
+  }
+  .player-avatar {
+    width: 34px;
+    height: 34px;
+    font-size: 13px;
+  }
+  .player-name {
+    font-size: 12px;
+  }
+  .player-stone {
+    width: 16px;
+    height: 16px;
+  }
+  .vs-text {
+    font-size: 16px;
+  }
+  #scoreDisplay {
+    font-size: 16px;
+    gap: 10px;
+  }
+  #waitingText {
+    font-size: 16px;
+  }
+  #moveTimer {
+    font-size: 18px;
+    padding: 3px 12px;
+    min-width: 60px;
+  }
+  .game-footer {
+    margin-top: 8px;
+    gap: 8px;
+  }
+  #statusText {
+    font-size: 12px;
+  }
+}
+
+/* 手机竖屏 */
+@media (max-width: 420px) {
+  body {
+    padding: 4px;
+    justify-content: flex-start;
+    padding-top: 8px;
+  }
+  .game-header {
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .player-info {
+    padding: 4px 8px;
+    gap: 4px;
+  }
+  .player-avatar {
+    width: 28px;
+    height: 28px;
+    font-size: 11px;
+  }
+  .player-name {
+    font-size: 11px;
+  }
+  .player-stone {
+    width: 14px;
+    height: 14px;
+  }
+  .vs-text {
+    font-size: 14px;
+  }
+  #scoreDisplay {
+    font-size: 14px;
+    gap: 8px;
+  }
+  #waitingText {
+    font-size: 14px;
+  }
+  #moveTimer {
+    font-size: 16px;
+    padding: 2px 10px;
+    min-width: 54px;
+  }
+  .game-footer {
+    margin-top: 6px;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  #statusText {
+    font-size: 11px;
+    width: 100%;
+    text-align: center;
+  }
+  #btnSurrender,
+  #btnPlayAgain {
+    font-size: 12px;
+    padding: 6px 14px;
+  }
+}
