@@ -34,6 +34,14 @@ let canvas = null;
 let ctx = null;
 let roomId = null;
 
+// ---------- 动画状态 ----------
+let isAnimating = false;
+let animPlace = null;         // {row, col, color} 正在落下的子
+let animFlips = [];           // [{row, col, fromColor, toColor}] 被翻转的棋子
+let animStartTime = 0;
+let animCallback = null;
+const ANIM_DURATION = 350;    // 动画总时长 ms
+
 // ============================================================
 // 初始化
 // ============================================================
@@ -91,7 +99,7 @@ function resetBoard() {
 // ============================================================
 // 棋盘绘制
 // ============================================================
-function drawBoard() {
+function drawBoard(skipAnimating) {
   const w = canvas.width;
   const h = canvas.height;
 
@@ -119,35 +127,53 @@ function drawBoard() {
   ctx.lineWidth = 3;
   ctx.strokeRect(PADDING, PADDING, BOARD_SIZE * CELL_SIZE, BOARD_SIZE * CELL_SIZE);
 
+  // 动画中跳过正在变化的棋子位置
+  const skipSet = skipAnimating ? buildAnimSkipSet() : new Set();
+
   // 绘制所有棋子
   for (let r = 0; r < BOARD_SIZE; r++) {
     for (let c = 0; c < BOARD_SIZE; c++) {
+      if (skipSet.has(r + "," + c)) continue;
       if (board[r][c]) {
         drawStone(r, c, board[r][c]);
       }
     }
   }
 
-  // 合法落子提示
-  drawHints();
+  // 合法落子提示（动画中不显示）
+  if (!skipAnimating) {
+    drawHints();
+  }
   // 分数
   updateScore();
 }
 
-function drawStone(row, col, color) {
-  const x = PADDING + col * CELL_SIZE + CELL_SIZE / 2;
-  const y = PADDING + row * CELL_SIZE + CELL_SIZE / 2;
+function buildAnimSkipSet() {
+  const s = new Set();
+  if (animPlace) s.add(animPlace.row + "," + animPlace.col);
+  for (const f of animFlips) s.add(f.row + "," + f.col);
+  return s;
+}
+
+function drawStone(row, col, color, scaleX) {
+  if (scaleX === undefined) scaleX = 1;
+  const cx = PADDING + col * CELL_SIZE + CELL_SIZE / 2;
+  const cy = PADDING + row * CELL_SIZE + CELL_SIZE / 2;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(scaleX, 1);
 
   ctx.beginPath();
-  ctx.arc(x, y, STONE_RADIUS, 0, Math.PI * 2);
+  ctx.arc(0, 0, STONE_RADIUS, 0, Math.PI * 2);
 
   if (color === "black") {
-    const g = ctx.createRadialGradient(x - 5, y - 5, 2, x, y, STONE_RADIUS);
+    const g = ctx.createRadialGradient(-5, -5, 2, 0, 0, STONE_RADIUS);
     g.addColorStop(0, "#555");
     g.addColorStop(1, "#111");
     ctx.fillStyle = g;
   } else {
-    const g = ctx.createRadialGradient(x - 5, y - 5, 2, x, y, STONE_RADIUS);
+    const g = ctx.createRadialGradient(-5, -5, 2, 0, 0, STONE_RADIUS);
     g.addColorStop(0, "#fff");
     g.addColorStop(1, "#ccc");
     ctx.fillStyle = g;
@@ -156,6 +182,8 @@ function drawStone(row, col, color) {
   ctx.strokeStyle = color === "black" ? "#000" : "#999";
   ctx.lineWidth = 1;
   ctx.stroke();
+
+  ctx.restore();
 }
 
 function drawHints() {
@@ -178,8 +206,13 @@ function updateScore() {
       else if (board[r][c] === "white") white++;
     }
   }
-  document.getElementById("scoreBlack").textContent = "● " + black;
-  document.getElementById("scoreWhite").textContent = "○ " + white;
+  const opponentColor = myColor === "black" ? "white" : "black";
+  const opScore = opponentColor === "black" ? black : white;
+  const myScore = myColor === "black" ? black : white;
+  document.getElementById("scoreOpponent").textContent =
+    (opponentColor === "black" ? "● " : "○ ") + opScore;
+  document.getElementById("scoreMine").textContent =
+    (myColor === "black" ? "● " : "○ ") + myScore;
 }
 
 // ============================================================
@@ -220,15 +253,83 @@ function getFlips(row, col, color) {
 }
 
 // ============================================================
-// 落子
+// 落子（带动画）
 // ============================================================
-function placeStone(row, col, color) {
-  board[row][col] = color;
+function placeStone(row, col, color, onDone) {
   const flips = getFlips(row, col, color);
-  for (const { row: fr, col: fc } of flips) {
-    board[fr][fc] = color;
+  if (flips.length === 0) {
+    board[row][col] = color;
+    drawBoard();
+    if (onDone) onDone();
+    return;
   }
-  drawBoard();
+
+  const opponentColor = color === "black" ? "white" : "black";
+  isAnimating = true;
+  animPlace = { row, col, color };
+  animFlips = flips.map(f => ({ row: f.row, col: f.col, fromColor: opponentColor, toColor: color }));
+  animStartTime = performance.now();
+  animCallback = () => {
+    board[animPlace.row][animPlace.col] = animPlace.color;
+    for (const f of animFlips) {
+      board[f.row][f.col] = f.toColor;
+    }
+    isAnimating = false;
+    animPlace = null;
+    animFlips = [];
+    animStartTime = 0;
+    drawBoard();
+    if (onDone) onDone();
+  };
+
+  requestAnimationFrame(animationLoop);
+}
+
+function animationLoop(now) {
+  if (!isAnimating) return;
+  const elapsed = now - animStartTime;
+  const t = Math.min(elapsed / ANIM_DURATION, 1);
+  renderAnimationFrame(t);
+  if (t < 1) {
+    requestAnimationFrame(animationLoop);
+  } else {
+    if (animCallback) animCallback();
+  }
+}
+
+function renderAnimationFrame(t) {
+  drawBoard(true);
+
+  // 新落子弹出
+  if (animPlace) {
+    const popT = Math.min(t / 0.57, 1);
+    const scale = easeOutBack(popT);
+    drawStone(animPlace.row, animPlace.col, animPlace.color, scale);
+  }
+
+  // 被夹棋子翻转
+  const flipStart = 0.14;
+  const flipDuration = 0.57;
+  for (const f of animFlips) {
+    const ft = Math.max(0, Math.min(1, (t - flipStart) / flipDuration));
+    let drawColor, sx;
+    if (ft < 0.5) {
+      drawColor = f.fromColor;
+      sx = 1 - ft * 2;
+    } else {
+      drawColor = f.toColor;
+      sx = (ft - 0.5) * 2;
+    }
+    drawStone(f.row, f.col, drawColor, sx);
+  }
+
+  updateScore();
+}
+
+function easeOutBack(t) {
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
 }
 
 // ============================================================
@@ -270,7 +371,7 @@ function getWinner() {
 // 棋盘点击
 // ============================================================
 function onCanvasClick(e) {
-  if (!gameStarted || gameOver || !myTurn) return;
+  if (!gameStarted || gameOver || !myTurn || isAnimating) return;
 
   const rect = canvas.getBoundingClientRect();
   const scaleX = canvas.width / rect.width;
@@ -289,29 +390,27 @@ function onCanvasClick(e) {
   if (flips.length === 0) return;
 
   stopMoveTimer();
-  placeStone(row, col, myColor);
+  placeStone(row, col, myColor, () => {
+    sendToParent({
+      type: "game_action",
+      action: "place_stone",
+      data: { row, col, color: myColor },
+    });
 
-  sendToParent({
-    type: "game_action",
-    action: "place_stone",
-    data: { row, col, color: myColor },
+    const opponentColor = myColor === "black" ? "white" : "black";
+    validMoves = getValidMoves(opponentColor);
+    if (checkGameEnd()) {
+      endGame();
+      return;
+    }
+
+    myTurn = false;
+    currentTurn = opponentInfo.username;
+    document.getElementById("btnSurrender").classList.remove("show");
+    updateTurnDisplay();
+    startMoveTimer();
+    document.getElementById("statusText").textContent = "等待对手落子...";
   });
-
-  // 检查对手是否可走
-  const opponentColor = myColor === "black" ? "white" : "black";
-  validMoves = getValidMoves(opponentColor);
-  if (checkGameEnd()) {
-    endGame();
-    return;
-  }
-
-  // 切换到对手
-  myTurn = false;
-  currentTurn = opponentInfo.username;
-  document.getElementById("btnSurrender").classList.remove("show");
-  updateTurnDisplay();
-  startMoveTimer();
-  document.getElementById("statusText").textContent = "等待对手落子...";
 }
 
 // ============================================================
@@ -444,26 +543,26 @@ function handleGameAction(msg) {
   if (msg.action === "place_stone") {
     stopMoveTimer();
     const { row, col, color } = msg.data;
-    placeStone(row, col, color);
+    placeStone(row, col, color, () => {
+      if (checkGameEnd()) {
+        endGame();
+        return;
+      }
 
-    if (checkGameEnd()) {
-      endGame();
-      return;
-    }
+      myTurn = true;
+      currentTurn = myInfo.username;
+      validMoves = getValidMoves(myColor);
+      updateTurnDisplay();
+      drawBoard();
+      startMoveTimer();
+      document.getElementById("btnSurrender").classList.add("show");
+      document.getElementById("statusText").textContent = "轮到你了（" +
+        (myColor === "black" ? "黑棋" : "白棋") + "）";
 
-    myTurn = true;
-    currentTurn = myInfo.username;
-    validMoves = getValidMoves(myColor);
-    updateTurnDisplay();
-    drawBoard();
-    startMoveTimer();
-    document.getElementById("btnSurrender").classList.add("show");
-    document.getElementById("statusText").textContent = "轮到你了（" +
-      (myColor === "black" ? "黑棋" : "白棋") + "）";
-
-    if (validMoves.length === 0) {
-      skipTurn();
-    }
+      if (validMoves.length === 0) {
+        skipTurn();
+      }
+    });
   } else if (msg.action === "skip_turn") {
     stopMoveTimer();
     if (checkGameEnd()) {
