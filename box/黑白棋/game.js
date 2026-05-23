@@ -30,6 +30,7 @@ let thisGameName = "黑白棋";
 let validMoves = [];          // 己方当前合法位置 [{row, col}, ...]
 let moveTimeLeft = 60;
 let moveTimerInterval = null;
+let nudgeSent = false;
 let canvas = null;
 let ctx = null;
 let roomId = null;
@@ -92,6 +93,7 @@ function resetBoard() {
   currentTurn = null;
   myTurn = false;
   validMoves = [];
+  nudgeSent = false;
   moveTimeLeft = 60;
   stopMoveTimer();
 }
@@ -406,7 +408,9 @@ function onCanvasClick(e) {
 
     myTurn = false;
     currentTurn = opponentInfo.username;
+    nudgeSent = false;
     document.getElementById("btnSurrender").classList.remove("show");
+    document.getElementById("btnNudge").classList.add("show");
     updateTurnDisplay();
     startMoveTimer();
     document.getElementById("statusText").textContent = "等待对手落子...";
@@ -432,7 +436,9 @@ function skipTurn() {
 
   myTurn = false;
   currentTurn = opponentInfo.username;
+  nudgeSent = false;
   document.getElementById("btnSurrender").classList.remove("show");
+  document.getElementById("btnNudge").classList.add("show");
   updateTurnDisplay();
   startMoveTimer();
   document.getElementById("statusText").textContent = "无合法位置，跳过回合";
@@ -446,6 +452,7 @@ function endGame() {
   gameOver = true;
   stopMoveTimer();
   document.getElementById("btnSurrender").classList.remove("show");
+  document.getElementById("btnNudge").classList.remove("show");
   document.getElementById("btnPlayAgain").classList.add("show");
   hideTurnHighlight();
 
@@ -526,6 +533,7 @@ function handleGameStart(msg) {
   drawBoard();
 
   if (myTurn) {
+    document.getElementById("btnNudge").classList.remove("show");
     startMoveTimer();
     document.getElementById("statusText").textContent = "轮到你了（黑棋）";
     if (validMoves.length === 0) {
@@ -533,6 +541,7 @@ function handleGameStart(msg) {
       return;
     }
   } else {
+    document.getElementById("btnNudge").classList.add("show");
     startMoveTimer();
     document.getElementById("statusText").textContent = "等待对手落子...";
   }
@@ -551,11 +560,13 @@ function handleGameAction(msg) {
 
       myTurn = true;
       currentTurn = myInfo.username;
+      nudgeSent = false;
       validMoves = getValidMoves(myColor);
       updateTurnDisplay();
       drawBoard();
       startMoveTimer();
       document.getElementById("btnSurrender").classList.add("show");
+      document.getElementById("btnNudge").classList.remove("show");
       document.getElementById("statusText").textContent = "轮到你了（" +
         (myColor === "black" ? "黑棋" : "白棋") + "）";
 
@@ -572,11 +583,13 @@ function handleGameAction(msg) {
 
     myTurn = true;
     currentTurn = myInfo.username;
+    nudgeSent = false;
     validMoves = getValidMoves(myColor);
     updateTurnDisplay();
     drawBoard();
     startMoveTimer();
     document.getElementById("btnSurrender").classList.add("show");
+    document.getElementById("btnNudge").classList.remove("show");
     document.getElementById("statusText").textContent = "对手无合法位置，轮到你了";
   } else if (msg.action === "surrender") {
     stopMoveTimer();
@@ -586,6 +599,18 @@ function handleGameAction(msg) {
     document.getElementById("statusText").textContent = "对手认输，你赢了！";
     document.getElementById("btnPlayAgain").classList.add("show");
     document.getElementById("btnSurrender").classList.remove("show");
+    document.getElementById("btnNudge").classList.remove("show");
+  } else if (msg.action === "nudge") {
+    showNudgeToast();
+    const el = document.getElementById("statusText");
+    el.textContent = "对手提醒你落子";
+    el.style.color = "#f1c40f";
+    setTimeout(() => {
+      el.style.color = "";
+      if (!gameOver && myTurn) {
+        el.textContent = "轮到你了（" + (myColor === "black" ? "黑棋" : "白棋") + "）";
+      }
+    }, 2000);
   } else if (msg.action === "timeout") {
     stopMoveTimer();
     gameOver = true;
@@ -594,6 +619,7 @@ function handleGameAction(msg) {
     document.getElementById("statusText").textContent = "对手超时，你赢了！";
     document.getElementById("btnPlayAgain").classList.add("show");
     document.getElementById("btnSurrender").classList.remove("show");
+    document.getElementById("btnNudge").classList.remove("show");
   } else if (msg.action === "player_left") {
     stopMoveTimer();
     gameStarted = false;
@@ -602,6 +628,7 @@ function handleGameAction(msg) {
     document.getElementById("statusText").textContent = "对手断线";
     document.getElementById("btnPlayAgain").classList.remove("show");
     document.getElementById("btnSurrender").classList.remove("show");
+    document.getElementById("btnNudge").classList.remove("show");
   }
 }
 
@@ -665,6 +692,7 @@ function playAgain() {
   sendToParent({ type: "play_again" });
   document.getElementById("btnPlayAgain").classList.remove("show");
   document.getElementById("btnSurrender").classList.remove("show");
+  document.getElementById("btnNudge").classList.remove("show");
 }
 
 // ============================================================
@@ -680,7 +708,43 @@ function surrender() {
   document.getElementById("statusText").textContent = "你认输了";
   document.getElementById("btnPlayAgain").classList.add("show");
   document.getElementById("btnSurrender").classList.remove("show");
+  document.getElementById("btnNudge").classList.remove("show");
   sendToParent({ type: "game_over", gameName: thisGameName, result: "loss", isDraw: false });
+}
+
+// ============================================================
+// 提醒对方
+// ============================================================
+function nudgeOpponent() {
+  if (myTurn || gameOver || nudgeSent) return;
+  nudgeSent = true;
+  sendToParent({ type: "game_action", action: "nudge", data: {} });
+  document.getElementById("btnNudge").classList.remove("show");
+  document.getElementById("statusText").textContent = "已发送提醒";
+  setTimeout(() => {
+    if (!gameOver && !myTurn) {
+      document.getElementById("statusText").textContent = "等待对手落子...";
+    }
+  }, 1500);
+}
+
+function showNudgeToast() {
+  const wrapper = document.getElementById("boardWrapper");
+  if (!wrapper) return;
+
+  let toast = document.getElementById("nudgeToast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "nudgeToast";
+    toast.className = "nudge-toast";
+    toast.textContent = "对手提醒你落子！";
+    wrapper.appendChild(toast);
+  }
+
+  toast.classList.add("show");
+  setTimeout(() => {
+    toast.classList.remove("show");
+  }, 2000);
 }
 
 // ============================================================
@@ -720,6 +784,7 @@ function timeoutLoss() {
   document.getElementById("statusText").textContent = "超时，你输了！";
   document.getElementById("btnPlayAgain").classList.add("show");
   document.getElementById("btnSurrender").classList.remove("show");
+  document.getElementById("btnNudge").classList.remove("show");
   sendToParent({ type: "game_action", action: "timeout", data: {} });
   sendToParent({ type: "game_over", gameName: thisGameName, result: "loss", isDraw: false });
 }

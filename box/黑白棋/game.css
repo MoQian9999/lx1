@@ -221,6 +221,52 @@ canvas#boardCanvas {
   display: inline-block;
 }
 
+#btnNudge {
+  display: none;
+  padding: 8px 20px;
+  border: none;
+  border-radius: 6px;
+  background: #f39c12;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+  min-height: 44px;
+}
+#btnNudge:hover {
+  background: #d68910;
+}
+#btnNudge.show {
+  display: inline-block;
+}
+
+/* 提醒提示弹层 */
+.nudge-toast {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  background: rgba(0, 0, 0, 0.75);
+  color: #f1c40f;
+  font-size: 28px;
+  font-weight: bold;
+  padding: 24px 36px;
+  border-radius: 12px;
+  z-index: 10;
+  pointer-events: none;
+  white-space: nowrap;
+  text-shadow: 0 0 12px rgba(241, 196, 15, 0.6);
+  transition: transform 0.3s ease;
+}
+.nudge-toast.show {
+  transform: translate(-50%, -50%) scale(1);
+  animation: nudgePulse 0.6s ease-in-out 2;
+}
+@keyframes nudgePulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  50% { transform: translate(-50%, -50%) scale(1.08); }
+}
+
 /* ---------- 响应式 ---------- */
 
 /* 平板 / 手机横屏 */
@@ -263,9 +309,17 @@ canvas#boardCanvas {
     padding: 3px 12px;
     min-width: 60px;
   }
+  .nudge-toast {
+    font-size: 22px;
+    padding: 18px 28px;
+  }
   .game-footer {
     margin-top: 8px;
     gap: 8px;
+  }
+  #btnNudge {
+    font-size: 12px;
+    padding: 6px 14px;
   }
   #statusText {
     font-size: 12px;
@@ -314,6 +368,10 @@ canvas#boardCanvas {
     padding: 2px 10px;
     min-width: 54px;
   }
+  .nudge-toast {
+    font-size: 18px;
+    padding: 14px 22px;
+  }
   .game-footer {
     margin-top: 6px;
     gap: 6px;
@@ -325,6 +383,7 @@ canvas#boardCanvas {
     width: 100%;
     text-align: center;
   }
+  #btnNudge,
   #btnSurrender,
   #btnPlayAgain {
     font-size: 12px;

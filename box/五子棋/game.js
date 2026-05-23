@@ -32,6 +32,14 @@ let canvas = null;
 let ctx = null;
 let roomId = null;
 
+// ---------- 动画状态 ----------
+let isAnimating = false;
+let animStone = null;         // {row, col, color} 正在落下的子
+let animStartTime = 0;
+let animCallback = null;
+const ANIM_DURATION = 320;    // 动画总时长 ms
+let audioCtx = null;          // Web Audio 上下文（lazy init）
+
 // ============================================================
 // 初始化：从 URL 参数读取玩家信息
 // ============================================================
@@ -102,7 +110,7 @@ function resetBoard() {
 // ============================================================
 // 绘制棋盘（线 + 星位点）
 // ============================================================
-function drawBoard() {
+function drawBoard(skipAnimating) {
   const w = canvas.width;
   const h = canvas.height;
 
@@ -115,19 +123,17 @@ function drawBoard() {
   ctx.lineWidth = 1;
   for (let i = 0; i < BOARD_SIZE; i++) {
     const pos = PADDING + i * CELL_SIZE;
-    // 横线
     ctx.beginPath();
     ctx.moveTo(PADDING, pos);
     ctx.lineTo(PADDING + (BOARD_SIZE - 1) * CELL_SIZE, pos);
     ctx.stroke();
-    // 竖线
     ctx.beginPath();
     ctx.moveTo(pos, PADDING);
     ctx.lineTo(pos, PADDING + (BOARD_SIZE - 1) * CELL_SIZE);
     ctx.stroke();
   }
 
-  // 星位点（天元和四角星）
+  // 星位点
   const starPoints = [
     [3, 3], [3, 7], [3, 11],
     [7, 3], [7, 7], [7, 11],
@@ -140,9 +146,13 @@ function drawBoard() {
     ctx.fill();
   }
 
-  // 重新绘制所有已放置的棋子
+  // 动画中跳过正在变化的棋子
+  const skipKey = skipAnimating && animStone ? (animStone.row + "," + animStone.col) : null;
+
+  // 绘制所有棋子
   for (let row = 0; row < BOARD_SIZE; row++) {
     for (let col = 0; col < BOARD_SIZE; col++) {
+      if (skipKey && row === animStone.row && col === animStone.col) continue;
       if (board[row][col]) {
         drawStone(row, col, board[row][col]);
       }
@@ -153,34 +163,36 @@ function drawBoard() {
 // ============================================================
 // 绘制一颗棋子
 // ============================================================
-function drawStone(row, col, color) {
-  const x = PADDING + col * CELL_SIZE;
-  const y = PADDING + row * CELL_SIZE;
+function drawStone(row, col, color, scaleX) {
+  if (scaleX === undefined) scaleX = 1;
+  const cx = PADDING + col * CELL_SIZE;
+  const cy = PADDING + row * CELL_SIZE;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(scaleX, 1);
 
   ctx.beginPath();
-  ctx.arc(x, y, STONE_RADIUS, 0, Math.PI * 2);
+  ctx.arc(0, 0, STONE_RADIUS, 0, Math.PI * 2);
 
   if (color === "black") {
-    const gradient = ctx.createRadialGradient(
-      x - 4, y - 4, 2, x, y, STONE_RADIUS
-    );
+    const gradient = ctx.createRadialGradient(-4, -4, 2, 0, 0, STONE_RADIUS);
     gradient.addColorStop(0, "#555");
     gradient.addColorStop(1, "#111");
     ctx.fillStyle = gradient;
   } else {
-    const gradient = ctx.createRadialGradient(
-      x - 4, y - 4, 2, x, y, STONE_RADIUS
-    );
+    const gradient = ctx.createRadialGradient(-4, -4, 2, 0, 0, STONE_RADIUS);
     gradient.addColorStop(0, "#ffffff");
     gradient.addColorStop(1, "#cccccc");
     ctx.fillStyle = gradient;
   }
   ctx.fill();
 
-  // 边缘
   ctx.strokeStyle = color === "black" ? "#000" : "#aaa";
   ctx.lineWidth = 1;
   ctx.stroke();
+
+  ctx.restore();
 }
 
 // ============================================================
@@ -207,83 +219,190 @@ function drawLastMoveMark() {
 // 处理棋盘点击
 // ============================================================
 function onCanvasClick(e) {
-  if (!gameStarted || gameOver || !myTurn) return;
+  if (!gameStarted || gameOver || !myTurn || isAnimating) return;
 
   const rect = canvas.getBoundingClientRect();
-  // 考虑 Canvas 可能被缩放（CSS 尺寸 vs 实际尺寸）
   const scaleX = canvas.width / rect.width;
   const scaleY = canvas.height / rect.height;
   const mx = (e.clientX - rect.left) * scaleX;
   const my = (e.clientY - rect.top) * scaleY;
 
-  // 找到最近的交叉点
   const col = Math.round((mx - PADDING) / CELL_SIZE);
   const row = Math.round((my - PADDING) / CELL_SIZE);
 
-  // 越界检查
   if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return;
-  // 已有棋子
   if (board[row][col] !== null) return;
 
-  // 落子
   stopMoveTimer();
-  placeStone(row, col, myColor);
   pendingUndoRequest = false;
+  nudgeSent = false;
 
-  // 通知对手（通过父页面转发）
-  sendToParent({
-    type: "game_action",
-    action: "place_stone",
-    data: { row, col, color: myColor },
+  placeStone(row, col, myColor, () => {
+    sendToParent({
+      type: "game_action",
+      action: "place_stone",
+      data: { row, col, color: myColor },
+    });
+
+    if (checkWin(row, col, myColor)) {
+      gameOver = true;
+      stopMoveTimer();
+      document.getElementById("statusText").textContent = "你赢了！";
+      document.getElementById("btnPlayAgain").classList.add("show");
+      document.getElementById("btnSurrender").classList.remove("show");
+      document.getElementById("btnUndo").classList.remove("show");
+      document.getElementById("btnNudge").classList.remove("show");
+      hideTurnHighlight();
+      sendToParent({ type: "game_over", gameName: thisGameName, result: "win", isDraw: false });
+      return;
+    }
+
+    if (isBoardFull()) {
+      gameOver = true;
+      stopMoveTimer();
+      document.getElementById("statusText").textContent = "平局！";
+      document.getElementById("btnPlayAgain").classList.add("show");
+      document.getElementById("btnSurrender").classList.remove("show");
+      document.getElementById("btnUndo").classList.remove("show");
+      document.getElementById("btnNudge").classList.remove("show");
+      hideTurnHighlight();
+      sendToParent({ type: "game_over", gameName: thisGameName, result: "draw", isDraw: true });
+      return;
+    }
+
+    myTurn = false;
+    currentTurn = opponentInfo.username;
+    document.getElementById("btnNudge").classList.add("show");
+    updateTurnDisplay();
+    startMoveTimer();
   });
-
-  // 检查胜负
-  if (checkWin(row, col, myColor)) {
-    gameOver = true;
-    stopMoveTimer();
-    document.getElementById("statusText").textContent = "你赢了！";
-    document.getElementById("btnPlayAgain").classList.add("show");
-    document.getElementById("btnSurrender").classList.remove("show");
-    document.getElementById("btnUndo").classList.remove("show");
-    document.getElementById("btnNudge").classList.remove("show");
-    hideTurnHighlight();
-    sendToParent({ type: "game_over", gameName: thisGameName, result: "win", isDraw: false });
-    return;
-  }
-
-  // 检查平局（棋盘满了）
-  if (isBoardFull()) {
-    gameOver = true;
-    stopMoveTimer();
-    document.getElementById("statusText").textContent = "平局！";
-    document.getElementById("btnPlayAgain").classList.add("show");
-    document.getElementById("btnSurrender").classList.remove("show");
-    document.getElementById("btnUndo").classList.remove("show");
-    document.getElementById("btnNudge").classList.remove("show");
-    hideTurnHighlight();
-    sendToParent({ type: "game_over", gameName: thisGameName, result: "draw", isDraw: true });
-    return;
-  }
-
-  // 切换到对手回合
-  myTurn = false;
-  currentTurn = opponentInfo.username;
-  document.getElementById("btnNudge").classList.add("show");
-  updateTurnDisplay();
-  startMoveTimer();
 }
 
 // ============================================================
-// 落子（仅更新数据和绘制，不做校验）
+// 落子（带动画，接受回调）
 // ============================================================
-function placeStone(row, col, color) {
-  board[row][col] = color;
+function placeStone(row, col, color, onDone) {
+  // 无动画模式（悔棋等）
+  if (!onDone) {
+    board[row][col] = color;
+    prevMoveRow = lastMoveRow;
+    prevMoveCol = lastMoveCol;
+    lastMoveRow = row;
+    lastMoveCol = col;
+    drawBoard();
+    drawLastMoveMark();
+    return;
+  }
+
+  // 动画模式
+  board[row][col] = color;  // 立即更新数据（确保 checkWin 等可访问）
   prevMoveRow = lastMoveRow;
   prevMoveCol = lastMoveCol;
   lastMoveRow = row;
   lastMoveCol = col;
-  drawBoard();
-  drawLastMoveMark();
+
+  isAnimating = true;
+  animStone = { row, col, color };
+  animStartTime = performance.now();
+  animCallback = () => {
+    isAnimating = false;
+    animStone = null;
+    animStartTime = 0;
+    drawBoard();
+    drawLastMoveMark();
+    if (onDone) onDone();
+  };
+
+  playStoneSound(color);
+  requestAnimationFrame(animationLoop);
+}
+
+function animationLoop(now) {
+  if (!isAnimating) return;
+  const elapsed = now - animStartTime;
+  const t = Math.min(elapsed / ANIM_DURATION, 1);
+  renderAnimationFrame(t);
+  if (t < 1) {
+    requestAnimationFrame(animationLoop);
+  } else {
+    if (animCallback) animCallback();
+  }
+}
+
+function renderAnimationFrame(t) {
+  drawBoard(true);
+
+  if (animStone) {
+    // 棋子弹出
+    const popT = Math.min(t / 0.625, 1);
+    const scale = easeOutBack(popT);
+    drawStone(animStone.row, animStone.col, animStone.color, scale);
+
+    // 涟漪
+    const rippleStart = 0.25;
+    const rT = Math.max(0, Math.min(1, (t - rippleStart) / 0.75));
+    if (rT > 0) {
+      const cx = PADDING + animStone.col * CELL_SIZE;
+      const cy = PADDING + animStone.row * CELL_SIZE;
+      for (let i = 0; i < 2; i++) {
+        const rp = Math.max(0, rT - i * 0.2);
+        const radius = STONE_RADIUS + rp * 20;
+        const alpha = (1 - rp) * 0.4;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(255,255,255," + alpha + ")";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    }
+  }
+
+  if (lastMoveRow >= 0 && animStone) {
+    const mx = PADDING + animStone.col * CELL_SIZE;
+    const my = PADDING + animStone.row * CELL_SIZE;
+    ctx.beginPath();
+    ctx.arc(mx, my, 3, 0, Math.PI * 2);
+    ctx.fillStyle = "#ff4444";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.7)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+}
+
+function easeOutBack(t) {
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
+
+// ============================================================
+// 落子音效 (Web Audio API)
+// ============================================================
+function playStoneSound(color) {
+  try {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    const now = audioCtx.currentTime;
+    const freq = color === "black" ? 600 : 800;
+
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(freq, now);
+
+    gain.gain.setValueAtTime(0.3, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(now);
+    osc.stop(now + 0.08);
+  } catch (e) {
+    // 静默忽略音效失败
+  }
 }
 
 // ============================================================
@@ -433,44 +552,42 @@ function handleGameStart(msg) {
 // ============================================================
 function handleGameAction(msg) {
   if (msg.action === "place_stone") {
-    // 对手落子
     stopMoveTimer();
     const { row, col, color } = msg.data;
-    placeStone(row, col, color);
+    placeStone(row, col, color, () => {
+      if (checkWin(row, col, color)) {
+        gameOver = true;
+        document.getElementById("statusText").textContent = "对手获胜！";
+        document.getElementById("btnPlayAgain").classList.add("show");
+        document.getElementById("btnSurrender").classList.remove("show");
+        document.getElementById("btnUndo").classList.remove("show");
+        document.getElementById("btnNudge").classList.remove("show");
+        hideTurnHighlight();
+        return;
+      }
 
-    if (checkWin(row, col, color)) {
-      gameOver = true;
-      document.getElementById("statusText").textContent = "对手获胜！";
-      document.getElementById("btnPlayAgain").classList.add("show");
-      document.getElementById("btnSurrender").classList.remove("show");
-      document.getElementById("btnUndo").classList.remove("show");
+      if (isBoardFull()) {
+        gameOver = true;
+        document.getElementById("statusText").textContent = "平局！";
+        document.getElementById("btnPlayAgain").classList.add("show");
+        document.getElementById("btnSurrender").classList.remove("show");
+        document.getElementById("btnUndo").classList.remove("show");
+        document.getElementById("btnNudge").classList.remove("show");
+        hideTurnHighlight();
+        return;
+      }
+
+      myTurn = true;
+      currentTurn = myInfo.username;
+      nudgeSent = false;
+      pendingUndoRequest = false;
+      document.getElementById("btnUndo").classList.add("show");
       document.getElementById("btnNudge").classList.remove("show");
-      hideTurnHighlight();
-      return;
-    }
-
-    if (isBoardFull()) {
-      gameOver = true;
-      document.getElementById("statusText").textContent = "平局！";
-      document.getElementById("btnPlayAgain").classList.add("show");
-      document.getElementById("btnSurrender").classList.remove("show");
-      document.getElementById("btnUndo").classList.remove("show");
-      document.getElementById("btnNudge").classList.remove("show");
-      hideTurnHighlight();
-      return;
-    }
-
-    // 轮到我
-    myTurn = true;
-    currentTurn = myInfo.username;
-    nudgeSent = false;
-    pendingUndoRequest = false;
-    document.getElementById("btnUndo").classList.add("show");
-    document.getElementById("btnNudge").classList.remove("show");
-    updateTurnDisplay();
-    startMoveTimer();
-    document.getElementById("statusText").textContent = "轮到你了（" +
-      (myColor === "black" ? "黑棋" : "白棋") + "）";
+      updateTurnDisplay();
+      startMoveTimer();
+      document.getElementById("statusText").textContent = "轮到你了（" +
+        (myColor === "black" ? "黑棋" : "白棋") + "）";
+    });
   } else if (msg.action === "surrender") {
     stopMoveTimer();
     gameOver = true;
