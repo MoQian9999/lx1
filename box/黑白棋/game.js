@@ -212,9 +212,9 @@ function updateScore() {
   const opScore = opponentColor === "black" ? black : white;
   const myScore = myColor === "black" ? black : white;
   document.getElementById("scoreOpponent").textContent =
-    (opponentColor === "black" ? "● " : "○ ") + opScore;
+    (opponentColor === "black" ? "● " : "⚪ ") + opScore;
   document.getElementById("scoreMine").textContent =
-    (myColor === "black" ? "● " : "○ ") + myScore;
+    (myColor === "black" ? "● " : "⚪ ") + myScore;
 }
 
 // ============================================================
