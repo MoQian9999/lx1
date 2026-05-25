@@ -1,5 +1,5 @@
 /* ============================================================
-   象棋 - 游戏样式
+   国际象棋 - 游戏样式
    ============================================================ */
 
 * {
@@ -69,8 +69,8 @@ body {
   border-radius: 50%;
   flex-shrink: 0;
 }
-.stone-red {
-  background: radial-gradient(circle at 35% 35%, #e74c3c, #8b0000);
+.stone-white {
+  background: radial-gradient(circle at 35% 35%, #fff, #aaa);
   box-shadow: 0 0 4px rgba(0,0,0,0.5);
 }
 .stone-black {
@@ -204,6 +204,53 @@ canvas#boardCanvas {
 }
 .undo-buttons button:last-child:hover {
   background: #c0392b;
+}
+
+/* 升变选择遮罩 */
+#promotionOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  border-radius: 6px;
+  z-index: 7;
+}
+#promotionOverlay.hidden {
+  display: none;
+}
+.promotion-text {
+  font-size: 20px;
+  color: #fff;
+  text-align: center;
+}
+.promotion-choices {
+  display: flex;
+  gap: 12px;
+}
+.promotion-choices button {
+  width: 56px;
+  height: 56px;
+  border: 2px solid #f1c40f;
+  border-radius: 8px;
+  background: #2c3e50;
+  color: #fff;
+  font-size: 28px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.promotion-choices button:hover {
+  background: #34495e;
+  transform: scale(1.1);
 }
 
 /* 底部操作区 */
@@ -364,6 +411,14 @@ canvas#boardCanvas {
     padding: 8px 18px;
     min-width: 70px;
   }
+  .promotion-text {
+    font-size: 16px;
+  }
+  .promotion-choices button {
+    width: 46px;
+    height: 46px;
+    font-size: 24px;
+  }
   .nudge-toast {
     font-size: 22px;
     padding: 18px 28px;
@@ -421,6 +476,14 @@ canvas#boardCanvas {
     font-size: 12px;
     padding: 6px 14px;
     min-width: 60px;
+  }
+  .promotion-text {
+    font-size: 15px;
+  }
+  .promotion-choices button {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
   }
   .nudge-toast {
     font-size: 18px;

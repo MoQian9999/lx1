@@ -381,7 +381,7 @@ button:active {
   flex-shrink: 0;
 }
 
-/* ---------- 游戏容器（iframe） ---------- */
+/* ---------- 游戏容器（iframe + 房间面板） ---------- */
 #gameContainer {
   position: fixed;
   top: 0;
@@ -412,6 +412,98 @@ button:active {
 }
 #btnLeaveGame:hover {
   background: rgba(0,0,0,0.8);
+}
+
+/* 房间准备面板 */
+#roomPanel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 20px;
+}
+#roomPanelTitle {
+  font-size: 22px;
+  text-align: center;
+}
+#roomPlayerList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 280px;
+  max-width: 400px;
+  width: 100%;
+}
+.room-player-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.room-player-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+.room-player-name {
+  flex: 1;
+  font-size: 15px;
+  font-weight: bold;
+}
+.room-player-ready {
+  font-size: 13px;
+  font-weight: bold;
+  padding: 4px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.room-player-ready.ready {
+  color: #2ecc71;
+  background: rgba(46, 204, 113, 0.12);
+}
+.room-player-ready.waiting {
+  color: var(--textDim);
+  background: rgba(255,255,255,0.05);
+}
+#roomStatusText {
+  font-size: 14px;
+  color: var(--textDim);
+  text-align: center;
+}
+.room-buttons {
+  display: flex;
+  gap: 12px;
+}
+.btn-ready {
+  background: #27ae60;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 12px 32px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btn-ready:hover {
+  background: #219a52;
+}
+.btn-ready.is-ready {
+  background: #e67e22;
+}
+.btn-ready.is-ready:hover {
+  background: #d35400;
 }
 
 /* ---------- 在线玩家列表 ---------- */

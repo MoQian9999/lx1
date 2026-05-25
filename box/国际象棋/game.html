@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>象棋</title>
+  <title>国际象棋</title>
   <link rel="stylesheet" href="game.css">
 </head>
 <body>
@@ -19,7 +19,7 @@
     <span class="vs-text">VS</span>
 
     <div id="myPlayerInfo" class="player-info">
-      <div id="myStone" class="player-stone stone-red"></div>
+      <div id="myStone" class="player-stone stone-white"></div>
       <span id="myName" class="player-name">我</span>
       <div id="myAvatar" class="player-avatar">我</div>
     </div>
@@ -43,6 +43,11 @@
         <button onclick="acceptUndo()">同意</button>
         <button onclick="rejectUndo()">拒绝</button>
       </div>
+    </div>
+    <!-- 升变选择遮罩 -->
+    <div id="promotionOverlay" class="hidden">
+      <p class="promotion-text">选择升变棋子</p>
+      <div class="promotion-choices" id="promotionChoices"></div>
     </div>
   </div>
 

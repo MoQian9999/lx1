@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>飞行棋</title>
+  <link rel="stylesheet" href="game.css">
+</head>
+<body>
+
+  <!-- ============================================================ -->
+  <!-- 赛前界面：规则设置 + 玩家列表 + 准备 -->
+  <!-- ============================================================ -->
+  <div id="preGamePanel">
+    <div id="preGameContent">
+      <!-- 规则面板 -->
+      <div id="rulePanel">
+        <h3 id="rulePanelTitle">规则设置</h3>
+        <div id="ruleList"></div>
+      </div>
+
+      <!-- 玩家列表 -->
+      <div id="prePlayerList">
+        <h3 id="prePlayerTitle">玩家列表</h3>
+        <div id="prePlayerItems"></div>
+      </div>
+
+      <!-- 准备状态 -->
+      <div id="preGameStatus">等待所有玩家准备...</div>
+
+      <!-- 按钮 -->
+      <div id="preGameButtons">
+        <button id="btnReady" class="btn-ready" onclick="toggleReady()">准备</button>
+        <button id="btnLeavePre" class="btn-secondary" onclick="leaveRoom()">离开房间</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- 对局界面 -->
+  <!-- ============================================================ -->
+  <div id="gamePanel" style="display:none">
+
+    <!-- 顶部：玩家信息面板 -->
+    <div class="game-header" id="playerHeader"></div>
+
+    <!-- 骰子区域 -->
+    <div id="diceArea">
+      <canvas id="diceCanvas" width="64" height="64"></canvas>
+      <button id="btnRoll" onclick="rollDice()">掷骰子</button>
+      <button id="btnFly" style="display:none" onclick="chooseFly()">飞行</button>
+    </div>
+
+    <!-- 计时器 -->
+    <div id="timerDisplay">
+      <span id="moveTimer">60s</span>
+    </div>
+
+    <!-- 棋盘 -->
+    <div id="boardWrapper" class="board-wrapper">
+      <canvas id="boardCanvas"></canvas>
+      <div id="waitingOverlay">
+        <span id="waitingText">等待对手加入...</span>
+      </div>
+      <!-- 连掷三次6提示 -->
+      <div id="sixPenaltyToast" class="nudge-toast" style="display:none">连掷三次6！棋子送回基地</div>
+    </div>
+
+    <!-- 规则查看按钮（对局中） -->
+    <button id="btnShowRules" class="btn-secondary" onclick="toggleRulesPopup()">规则</button>
+
+    <!-- 规则弹窗（对局中查看） -->
+    <div id="rulesPopup" class="modal-overlay" style="display:none">
+      <div class="modal">
+        <h3>当前规则</h3>
+        <div id="rulesPopupList"></div>
+        <button class="btn-secondary" onclick="toggleRulesPopup()">关闭</button>
+      </div>
+    </div>
+
+    <!-- 底部控制 -->
+    <div class="game-footer">
+      <span id="statusText"></span>
+      <button id="btnNudge" onclick="nudgePlayer()">提醒</button>
+      <button id="btnSurrender" onclick="surrender()">认输</button>
+      <button id="btnPlayAgain" onclick="playAgain()">再来一局</button>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>

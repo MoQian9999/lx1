@@ -101,10 +101,21 @@
   </div>
 
   <!-- ============================================================ -->
-  <!-- 游戏界面容器（iframe） -->
+  <!-- 游戏界面容器（iframe + 房间面板） -->
   <!-- ============================================================ -->
   <div id="gameContainer" style="display:none">
-    <iframe id="gameIframe" src="" frameborder="0" allowfullscreen></iframe>
+    <!-- 房间准备面板（游戏开始前显示） -->
+    <div id="roomPanel" style="display:none">
+      <h2 id="roomPanelTitle">房间</h2>
+      <div id="roomPlayerList"></div>
+      <div id="roomStatusText">等待所有玩家准备...</div>
+      <div class="room-buttons">
+        <button id="btnReady" class="btn-ready" onclick="toggleReady()">准备</button>
+        <button id="btnLeaveRoom" class="btn-secondary" onclick="leaveRoom()">离开房间</button>
+      </div>
+    </div>
+    <!-- 游戏 iframe（游戏开始后显示） -->
+    <iframe id="gameIframe" src="" frameborder="0" allowfullscreen style="display:none"></iframe>
     <button id="btnLeaveGame" onclick="leaveGame()">离开游戏</button>
   </div>
 

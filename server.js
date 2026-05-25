@@ -107,7 +107,7 @@ wss.on("error", (err) => {
 // ---------- 内存数据 ----------
 // 在线用户列表：Map<username, { ws, avatarText, textColor, borderColor, currentRoom, currentGame }>
 const users = new Map();
-// 房间列表：Map<roomId, { id, gameName, players: [], maxPlayers, status }>
+// 房间列表：Map<roomId, { id, gameName, players: [], maxPlayers, status, customReady }>
 const rooms = new Map();
 // 战绩统计：Map<gameName, Map<username, { wins, losses, draws }>>
 const gameStats = new Map();
@@ -207,6 +207,7 @@ function sendRoomUpdate(roomId) {
       avatarText: p.avatarText,
       textColor: p.textColor,
       borderColor: p.borderColor,
+      ready: p.ready || false,
     })),
     maxPlayers: room.maxPlayers,
     status: room.status,
@@ -368,13 +369,17 @@ wss.on("connection", (ws) => {
         const u = users.get(currentUsername);
         if (!u) return;
 
-        // 先读取游戏的 maxPlayers
+        // 先读取游戏的配置
         const gameName = msg.gameName;
         const infoPath = path.join(__dirname, "box", gameName, "info.json");
         let maxPlayers = 2;
+        let minPlayers = 2;
+        let customReady = false;
         try {
           const info = JSON.parse(fs.readFileSync(infoPath, "utf-8"));
           maxPlayers = info.maxPlayers || 2;
+          minPlayers = info.minPlayers || 2;
+          customReady = info.customReady || false;
         } catch {}
 
         // 如果用户已在其他房间，先退出
@@ -391,16 +396,21 @@ wss.on("connection", (ws) => {
             avatarText: u.avatarText,
             textColor: u.textColor,
             borderColor: u.borderColor,
+            ready: false,
           }],
           maxPlayers,
+          minPlayers,
+          customReady,
           status: "waiting",
         };
         rooms.set(roomId, room);
         u.currentRoom = roomId;
         u.currentGame = gameName;
 
-        ws.send(JSON.stringify({ type: "room_created", roomId, gameName }));
+        ws.send(JSON.stringify({ type: "room_created", roomId, gameName, customReady }));
         broadcastUserList();
+        // 发送初始房间状态（包含 ready 信息）
+        sendRoomUpdate(roomId);
         break;
       }
 
@@ -439,6 +449,7 @@ wss.on("connection", (ws) => {
           avatarText: u.avatarText,
           textColor: u.textColor,
           borderColor: u.borderColor,
+          ready: false,
         });
         u.currentRoom = room.id;
         u.currentGame = room.gameName;
@@ -447,19 +458,50 @@ wss.on("connection", (ws) => {
           type: "room_joined",
           roomId: room.id,
           gameName: room.gameName,
+          customReady: room.customReady || false,
           players: room.players.map(p => ({
             username: p.username,
             avatarText: p.avatarText,
             textColor: p.textColor,
             borderColor: p.borderColor,
+            ready: p.ready || false,
           })),
         }));
 
-        // 如果人数已满，自动开始游戏
-        if (room.players.length >= room.maxPlayers) {
+        // 不再自动开始游戏，等待玩家准备
+        // customReady 游戏由游戏自行管理，普通游戏通过 set_ready 触发
+
+        sendRoomUpdate(room.id);
+        broadcastUserList();
+        break;
+      }
+
+      // ---------- 设置准备状态 ----------
+      case "set_ready": {
+        if (!currentUsername) return;
+        const u = users.get(currentUsername);
+        if (!u || !u.currentRoom) return;
+        const room = rooms.get(u.currentRoom);
+        if (!room) return;
+
+        const player = room.players.find(p => p.username === currentUsername);
+        if (!player) return;
+        player.ready = !!msg.ready;
+
+        // 广播准备状态更新
+        broadcastToRoom(room.id, {
+          type: "ready_update",
+          players: room.players.map(p => ({
+            username: p.username,
+            ready: p.ready || false,
+          })),
+        });
+
+        // 检查是否全部准备
+        const allReady = room.players.every(p => p.ready);
+        if (allReady && room.players.length >= (room.minPlayers || 2)) {
           room.status = "playing";
           room._statsRecorded = false;
-          // 随机决定先手
           const firstPlayerIndex = Math.floor(Math.random() * room.players.length);
           broadcastToRoom(room.id, {
             type: "game_start",
@@ -473,9 +515,6 @@ wss.on("connection", (ws) => {
             firstTurn: room.players[firstPlayerIndex].username,
           });
         }
-
-        sendRoomUpdate(room.id);
-        broadcastUserList();
         break;
       }
 
@@ -522,20 +561,20 @@ wss.on("connection", (ws) => {
         const room = rooms.get(u.currentRoom);
         if (!room) return;
 
-        // 新一局开始，重置战绩记录标记
+        // 重置所有玩家的准备状态
+        room.status = "waiting";
         room._statsRecorded = false;
-        // 随机决定先手（公平，忽略客户端建议）
-        const firstPlayerIndex = Math.floor(Math.random() * room.players.length);
+        for (const p of room.players) {
+          p.ready = false;
+        }
+
+        // 发送准备状态更新（所有人未准备）
         broadcastToRoom(room.id, {
-          type: "game_start",
-          roomId: room.id,
+          type: "ready_update",
           players: room.players.map(p => ({
             username: p.username,
-            avatarText: p.avatarText,
-            textColor: p.textColor,
-            borderColor: p.borderColor,
+            ready: false,
           })),
-          firstTurn: room.players[firstPlayerIndex].username,
         });
         break;
       }
@@ -557,6 +596,14 @@ wss.on("connection", (ws) => {
         if (msg.isDraw) {
           for (const player of room.players) {
             recordGameResult(gameName, player.username, "draw");
+          }
+        } else if (msg.winners && msg.winners.length > 0) {
+          for (const player of room.players) {
+            if (msg.winners.includes(player.username)) {
+              recordGameResult(gameName, player.username, "win");
+            } else {
+              recordGameResult(gameName, player.username, "loss");
+            }
           }
         } else if (msg.result === "win") {
           recordGameResult(gameName, currentUsername, "win");

@@ -1,0 +1,821 @@
+/* ============================================================
+   飞行棋 - 游戏样式
+   ============================================================ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Microsoft YaHei", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 12px;
+  user-select: none;
+}
+
+/* ============================================================
+   赛前界面
+   ============================================================ */
+#preGamePanel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 600px;
+}
+
+#preGameContent {
+  background: #16213e;
+  border-radius: 14px;
+  padding: 24px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 规则面板 */
+#rulePanel {
+  background: #0f3460;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+#rulePanelTitle {
+  font-size: 16px;
+  margin-bottom: 12px;
+  color: #f1c40f;
+}
+
+#ruleList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rule-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.rule-item .rule-label {
+  flex: 1;
+}
+
+.rule-item .rule-indicator {
+  font-weight: bold;
+  font-size: 16px;
+  width: 28px;
+  text-align: center;
+}
+
+.rule-item .rule-indicator.on {
+  color: #2ecc71;
+}
+
+.rule-item .rule-indicator.off {
+  color: #e74c3c;
+}
+
+.rule-toggle {
+  width: 48px;
+  height: 26px;
+  border-radius: 13px;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s;
+  position: relative;
+  min-height: 26px;
+  min-width: 48px;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.rule-toggle.on {
+  background: #2ecc71;
+}
+
+.rule-toggle.off {
+  background: #555;
+}
+
+.rule-toggle::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  transition: left 0.2s;
+}
+
+.rule-toggle.on::after {
+  left: 25px;
+}
+
+.rule-toggle.off::after {
+  left: 3px;
+}
+
+.rule-mode-hint {
+  font-size: 11px;
+  color: #999;
+  margin-left: 8px;
+}
+
+/* 玩家列表 */
+#prePlayerList {
+  background: #0f3460;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+#prePlayerTitle {
+  font-size: 16px;
+  margin-bottom: 12px;
+  color: #f1c40f;
+}
+
+#prePlayerItems {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pre-player-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 8px;
+}
+
+.pre-player-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.pre-player-name {
+  flex: 1;
+  font-size: 15px;
+  font-weight: bold;
+}
+
+.pre-player-ready {
+  font-size: 13px;
+  font-weight: bold;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.pre-player-ready.ready {
+  color: #2ecc71;
+  background: rgba(46, 204, 113, 0.12);
+}
+
+.pre-player-ready.waiting {
+  color: #999;
+  background: rgba(255,255,255,0.05);
+}
+
+.pre-player-host {
+  font-size: 11px;
+  color: #f1c40f;
+  padding: 2px 6px;
+  border: 1px solid #f1c40f;
+  border-radius: 4px;
+}
+
+/* 准备状态 */
+#preGameStatus {
+  text-align: center;
+  font-size: 14px;
+  color: #999;
+}
+
+#preGameButtons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+/* ============================================================
+   对局界面 - 顶部玩家面板
+   ============================================================ */
+.game-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.player-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #16213e;
+  border: 2px solid transparent;
+  transition: border-color 0.3s, box-shadow 0.3s;
+  font-size: 13px;
+}
+
+.player-info.current-turn {
+  border-color: #f1c40f;
+  box-shadow: 0 0 10px rgba(241, 196, 15, 0.4);
+}
+
+.player-info.finished {
+  border-color: #2ecc71;
+  opacity: 0.7;
+}
+
+.player-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.player-name {
+  font-size: 12px;
+  font-weight: bold;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-progress {
+  font-size: 11px;
+  color: #999;
+}
+
+.player-color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   骰子区域
+   ============================================================ */
+#diceArea {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+#diceCanvas {
+  background: #f5f0e8;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+#btnRoll {
+  padding: 10px 22px;
+  border: none;
+  border-radius: 8px;
+  background: #e94560;
+  color: #fff;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+  min-height: 44px;
+}
+
+#btnRoll:hover {
+  background: #d63e57;
+}
+
+#btnRoll:active {
+  transform: scale(0.97);
+}
+
+#btnRoll:disabled {
+  background: #555;
+  color: #999;
+  cursor: not-allowed;
+}
+
+#btnFly {
+  padding: 10px 22px;
+  border: none;
+  border-radius: 8px;
+  background: #3498db;
+  color: #fff;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.2s;
+  min-height: 44px;
+}
+
+#btnFly:hover {
+  background: #2980b9;
+}
+
+/* 计时器 */
+#timerDisplay {
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+#moveTimer {
+  font-size: 20px;
+  font-weight: bold;
+  color: #f1c40f;
+  background: #16213e;
+  padding: 3px 14px;
+  border-radius: 6px;
+  display: inline-block;
+  min-width: 60px;
+  transition: color 0.3s, background 0.3s;
+}
+
+#moveTimer.urgent {
+  color: #e74c3c;
+  background: #2c0a0a;
+  animation: timerBlink 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes timerBlink {
+  from { opacity: 1; }
+  to { opacity: 0.4; }
+}
+
+/* ============================================================
+   棋盘
+   ============================================================ */
+.board-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+canvas#boardCanvas {
+  border-radius: 6px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+  cursor: pointer;
+  max-width: 100%;
+  height: auto;
+  touch-action: manipulation;
+}
+
+/* 等待提示 */
+#waitingOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  z-index: 5;
+}
+
+#waitingOverlay.hidden {
+  display: none;
+}
+
+#waitingText {
+  font-size: 20px;
+  color: #fff;
+  text-align: center;
+}
+
+/* 惩罚提示 */
+#sixPenaltyToast {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(231, 76, 60, 0.9);
+  color: #fff;
+  font-size: 20px;
+  font-weight: bold;
+  padding: 16px 28px;
+  border-radius: 10px;
+  z-index: 10;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   规则弹窗
+   ============================================================ */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.6);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal {
+  background: #16213e;
+  border-radius: 14px;
+  padding: 24px;
+  min-width: 300px;
+  max-width: 400px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal h3 {
+  text-align: center;
+  font-size: 18px;
+}
+
+#rulesPopupList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#btnShowRules {
+  margin-top: 4px;
+  padding: 6px 16px;
+  font-size: 12px;
+  min-height: 32px;
+}
+
+/* ============================================================
+   按钮
+   ============================================================ */
+button {
+  padding: 10px 18px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+.btn-primary {
+  background: #e94560;
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: #d63e57;
+}
+
+.btn-secondary {
+  background: #0f3460;
+  color: #e0e0e0;
+}
+
+.btn-secondary:hover {
+  background: #1a4a7a;
+}
+
+.btn-ready {
+  background: #27ae60;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 12px 32px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-ready:hover {
+  background: #219a52;
+}
+
+.btn-ready.is-ready {
+  background: #e67e22;
+}
+
+.btn-ready.is-ready:hover {
+  background: #d35400;
+}
+
+/* 底部操作区 */
+.game-footer {
+  margin-top: 8px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+#statusText {
+  font-size: 14px;
+  color: #999;
+  width: 100%;
+  text-align: center;
+}
+
+#btnPlayAgain {
+  display: none;
+  padding: 8px 20px;
+  border: none;
+  border-radius: 6px;
+  background: #e94560;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+#btnPlayAgain:hover {
+  background: #d63e57;
+}
+
+#btnPlayAgain.show {
+  display: inline-block;
+}
+
+#btnSurrender {
+  display: none;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #555;
+  color: #ccc;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+  min-height: 44px;
+}
+
+#btnSurrender:hover {
+  background: #777;
+}
+
+#btnSurrender.show {
+  display: inline-block;
+}
+
+#btnNudge {
+  display: none;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  background: #f39c12;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+  min-height: 44px;
+}
+
+#btnNudge:hover {
+  background: #d68910;
+}
+
+#btnNudge.show {
+  display: inline-block;
+}
+
+/* 提醒提示弹层 */
+.nudge-toast {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0);
+  background: rgba(0, 0, 0, 0.75);
+  color: #f1c40f;
+  font-size: 22px;
+  font-weight: bold;
+  padding: 20px 30px;
+  border-radius: 12px;
+  z-index: 10;
+  pointer-events: none;
+  white-space: nowrap;
+  text-shadow: 0 0 12px rgba(241, 196, 15, 0.6);
+  transition: transform 0.3s ease;
+}
+
+.nudge-toast.show {
+  transform: translate(-50%, -50%) scale(1);
+  animation: nudgePulse 0.6s ease-in-out 2;
+}
+
+@keyframes nudgePulse {
+  0%, 100% { transform: translate(-50%, -50%) scale(1); }
+  50% { transform: translate(-50%, -50%) scale(1.08); }
+}
+
+/* ============================================================
+   响应式
+   ============================================================ */
+
+@media (max-width: 640px) {
+  body {
+    padding: 6px;
+  }
+
+  #preGameContent {
+    padding: 16px;
+    gap: 14px;
+  }
+
+  #rulePanel, #prePlayerList {
+    padding: 12px;
+  }
+
+  #rulePanelTitle, #prePlayerTitle {
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+
+  .rule-item {
+    font-size: 13px;
+    padding: 6px 10px;
+  }
+
+  .pre-player-avatar {
+    width: 34px;
+    height: 34px;
+    font-size: 12px;
+  }
+
+  .pre-player-name {
+    font-size: 13px;
+  }
+
+  .player-info {
+    padding: 4px 8px;
+    gap: 4px;
+  }
+
+  .player-avatar {
+    width: 28px;
+    height: 28px;
+    font-size: 11px;
+  }
+
+  .player-name {
+    font-size: 11px;
+    max-width: 60px;
+  }
+
+  #diceCanvas {
+    width: 52px;
+    height: 52px;
+  }
+
+  #btnRoll {
+    font-size: 14px;
+    padding: 8px 16px;
+  }
+
+  #moveTimer {
+    font-size: 18px;
+    padding: 2px 10px;
+    min-width: 50px;
+  }
+
+  #waitingText {
+    font-size: 16px;
+  }
+
+  .modal {
+    padding: 16px;
+    min-width: 260px;
+  }
+}
+
+@media (max-width: 420px) {
+  body {
+    padding: 4px;
+    justify-content: flex-start;
+    padding-top: 6px;
+  }
+
+  #preGameContent {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .rule-item {
+    font-size: 12px;
+  }
+
+  .pre-player-item {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .game-header {
+    gap: 6px;
+  }
+
+  .player-info {
+    padding: 3px 6px;
+    gap: 3px;
+  }
+
+  .player-avatar {
+    width: 24px;
+    height: 24px;
+    font-size: 10px;
+  }
+
+  .player-name {
+    font-size: 10px;
+    max-width: 50px;
+  }
+
+  .player-progress {
+    font-size: 10px;
+  }
+
+  #diceCanvas {
+    width: 44px;
+    height: 44px;
+  }
+
+  #btnRoll {
+    font-size: 13px;
+    padding: 6px 14px;
+    min-height: 38px;
+  }
+
+  #moveTimer {
+    font-size: 16px;
+    min-width: 46px;
+  }
+
+  #waitingText {
+    font-size: 14px;
+  }
+
+  .game-footer {
+    gap: 6px;
+  }
+
+  #statusText {
+    font-size: 12px;
+  }
+
+  #btnNudge, #btnSurrender, #btnPlayAgain {
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+
+  .btn-ready {
+    font-size: 14px;
+    padding: 10px 24px;
+  }
+}

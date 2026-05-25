@@ -53,6 +53,16 @@ let animStartTime = 0;
 let animCallback = null;
 const ANIM_DURATION = 250;
 
+// ---------- 悔棋状态 ----------
+let lastCaptured = null;        // 最后一步被吃的棋子（悔棋时还原）
+let prevMoveFromRow = -1;
+let prevMoveFromCol = -1;
+let prevMoveToRow = -1;
+let prevMoveToCol = -1;
+let prevCaptured = null;
+let pendingUndoRequest = false;
+let pendingUndoTwoStones = false;
+
 // ============================================================
 // 初始化
 // ============================================================
@@ -98,6 +108,13 @@ function resetBoard() {
   lastMoveFromCol = -1;
   lastMoveToRow = -1;
   lastMoveToCol = -1;
+  lastCaptured = null;
+  prevMoveFromRow = -1;
+  prevMoveFromCol = -1;
+  prevMoveToRow = -1;
+  prevMoveToCol = -1;
+  prevCaptured = null;
+  pendingUndoRequest = false;
   nudgeSent = false;
   opponentInfo = null;
   isAnimating = false;
@@ -664,11 +681,20 @@ function easeOutBack(t) {
 // ============================================================
 function executeMove(fromRow, fromCol, toRow, toCol, onDone) {
   const piece = board[fromRow][fromCol];
+  const captured = board[toRow][toCol];
+
+  // 将当前 last 转移到 prev（支持悔棋还原）
+  prevMoveFromRow = lastMoveFromRow;
+  prevMoveFromCol = lastMoveFromCol;
+  prevMoveToRow = lastMoveToRow;
+  prevMoveToCol = lastMoveToCol;
+  prevCaptured = lastCaptured;
 
   lastMoveFromRow = fromRow;
   lastMoveFromCol = fromCol;
   lastMoveToRow = toRow;
   lastMoveToCol = toCol;
+  lastCaptured = captured;
 
   // 更新棋盘
   board[toRow][toCol] = piece;
@@ -707,6 +733,7 @@ function afterLocalMove() {
     document.getElementById("btnPlayAgain").classList.add("show");
     document.getElementById("btnSurrender").classList.remove("show");
     document.getElementById("btnNudge").classList.remove("show");
+    document.getElementById("btnUndo").classList.remove("show");
     sendToParent({ type: "game_over", gameName: thisGameName, result: "win", isDraw: false });
     return;
   }
@@ -716,6 +743,7 @@ function afterLocalMove() {
   nudgeSent = false;
   document.getElementById("btnNudge").classList.add("show");
   document.getElementById("btnSurrender").classList.add("show");
+  document.getElementById("btnUndo").classList.add("show");
   updateTurnDisplay();
   startMoveTimer();
   const checkMsg = isKingInCheck(board, opponentColor) ? "将军！" : "";
@@ -826,6 +854,7 @@ function handleGameStart(msg) {
   document.getElementById("btnPlayAgain").classList.remove("show");
   document.getElementById("btnSurrender").classList.add("show");
   document.getElementById("btnNudge").classList.remove("show");
+  document.getElementById("btnUndo").classList.remove("show");
 
   for (const p of msg.players) {
     if (p.username !== myInfo.username) {
@@ -882,6 +911,7 @@ function handleGameAction(msg) {
         document.getElementById("btnPlayAgain").classList.add("show");
         document.getElementById("btnSurrender").classList.remove("show");
         document.getElementById("btnNudge").classList.remove("show");
+        document.getElementById("btnUndo").classList.remove("show");
         sendToParent({ type: "game_over", gameName: thisGameName, result: "loss", isDraw: false });
         return;
       }
@@ -890,6 +920,7 @@ function handleGameAction(msg) {
       currentTurn = myInfo.username;
       nudgeSent = false;
       document.getElementById("btnNudge").classList.remove("show");
+      document.getElementById("btnUndo").classList.add("show");
       updateTurnDisplay();
       startMoveTimer();
       const checkMsg = isKingInCheck(board, myColor) ? "将军！" : "";
@@ -906,6 +937,7 @@ function handleGameAction(msg) {
     document.getElementById("btnPlayAgain").classList.add("show");
     document.getElementById("btnSurrender").classList.remove("show");
     document.getElementById("btnNudge").classList.remove("show");
+    document.getElementById("btnUndo").classList.remove("show");
 
   } else if (msg.action === "nudge") {
     showNudgeToast();
@@ -929,7 +961,26 @@ function handleGameAction(msg) {
     document.getElementById("btnPlayAgain").classList.add("show");
     document.getElementById("btnSurrender").classList.remove("show");
     document.getElementById("btnNudge").classList.remove("show");
+    document.getElementById("btnUndo").classList.remove("show");
 
+  } else if (msg.action === "request_undo") {
+    stopMoveTimer();
+    pendingUndoTwoStones = msg.data && msg.data.undoTwoStones;
+    document.getElementById("undoOverlay").classList.remove("hidden");
+  } else if (msg.action === "undo_accepted") {
+    const undoTwoStones = msg.data && msg.data.undoTwoStones;
+    performUndo(undoTwoStones);
+  } else if (msg.action === "undo_rejected") {
+    pendingUndoRequest = false;
+    document.getElementById("btnUndo").classList.add("show");
+    document.getElementById("statusText").textContent = "对手拒绝了悔棋请求";
+    startMoveTimer();
+    setTimeout(() => {
+      if (!gameOver && myTurn) {
+        const colorName = myColor === "red" ? "红方" : "黑方";
+        document.getElementById("statusText").textContent = "轮到你了（" + colorName + "）";
+      }
+    }, 2000);
   } else if (msg.action === "player_left") {
     stopMoveTimer();
     gameStarted = false;
@@ -939,6 +990,7 @@ function handleGameAction(msg) {
     document.getElementById("btnPlayAgain").classList.remove("show");
     document.getElementById("btnSurrender").classList.remove("show");
     document.getElementById("btnNudge").classList.remove("show");
+    document.getElementById("btnUndo").classList.remove("show");
   }
 }
 
@@ -990,6 +1042,7 @@ function renderPlayerInfo() {
 function showWaiting(text) {
   document.getElementById("waitingText").textContent = text;
   document.getElementById("waitingOverlay").classList.remove("hidden");
+  document.getElementById("undoOverlay").classList.add("hidden");
 }
 
 function hideWaiting() {
@@ -1014,6 +1067,7 @@ function playAgain() {
   document.getElementById("btnPlayAgain").classList.remove("show");
   document.getElementById("btnSurrender").classList.remove("show");
   document.getElementById("btnNudge").classList.remove("show");
+  document.getElementById("btnUndo").classList.remove("show");
 }
 
 // ============================================================
@@ -1030,6 +1084,7 @@ function surrender() {
   document.getElementById("btnPlayAgain").classList.add("show");
   document.getElementById("btnSurrender").classList.remove("show");
   document.getElementById("btnNudge").classList.remove("show");
+  document.getElementById("btnUndo").classList.remove("show");
   sendToParent({ type: "game_over", gameName: thisGameName, result: "loss", isDraw: false });
 }
 
@@ -1076,8 +1131,92 @@ function timeoutLoss() {
   document.getElementById("btnPlayAgain").classList.add("show");
   document.getElementById("btnSurrender").classList.remove("show");
   document.getElementById("btnNudge").classList.remove("show");
+  document.getElementById("btnUndo").classList.remove("show");
   sendToParent({ type: "game_action", action: "timeout", data: {} });
   sendToParent({ type: "game_over", gameName: thisGameName, result: "loss", isDraw: false });
+}
+
+// ============================================================
+// 悔棋
+// ============================================================
+function requestUndo() {
+  if (gameOver || pendingUndoRequest || lastMoveFromRow < 0) return;
+  if (myTurn && prevMoveFromRow < 0) return;
+  pendingUndoRequest = true;
+  const undoTwoStones = myTurn;
+  sendToParent({ type: "game_action", action: "request_undo", data: { undoTwoStones } });
+  document.getElementById("statusText").textContent = "已发送悔棋请求，等待对手回应...";
+  document.getElementById("btnUndo").classList.remove("show");
+}
+
+function acceptUndo() {
+  document.getElementById("undoOverlay").classList.add("hidden");
+  const undoTwoStones = pendingUndoTwoStones;
+  sendToParent({ type: "game_action", action: "undo_accepted", data: { undoTwoStones } });
+  performUndo(undoTwoStones);
+}
+
+function rejectUndo() {
+  document.getElementById("undoOverlay").classList.add("hidden");
+  sendToParent({ type: "game_action", action: "undo_rejected", data: {} });
+}
+
+function performUndo(undoTwoStones) {
+  if (undoTwoStones) {
+    // 撤2步：对方最后1步 + 己方上1步
+    if (lastMoveFromRow >= 0) {
+      board[lastMoveFromRow][lastMoveFromCol] = board[lastMoveToRow][lastMoveToCol];
+      board[lastMoveToRow][lastMoveToCol] = lastCaptured;
+    }
+    if (prevMoveFromRow >= 0) {
+      board[prevMoveFromRow][prevMoveFromCol] = board[prevMoveToRow][prevMoveToCol];
+      board[prevMoveToRow][prevMoveToCol] = prevCaptured;
+    }
+    lastMoveFromRow = -1;
+    lastMoveFromCol = -1;
+    lastMoveToRow = -1;
+    lastMoveToCol = -1;
+    lastCaptured = null;
+    prevMoveFromRow = -1;
+    prevMoveFromCol = -1;
+    prevMoveToRow = -1;
+    prevMoveToCol = -1;
+    prevCaptured = null;
+  } else {
+    // 撤1步：己方最后1步
+    if (lastMoveFromRow >= 0) {
+      board[lastMoveFromRow][lastMoveFromCol] = board[lastMoveToRow][lastMoveToCol];
+      board[lastMoveToRow][lastMoveToCol] = lastCaptured;
+    }
+    lastMoveFromRow = prevMoveFromRow;
+    lastMoveFromCol = prevMoveFromCol;
+    lastMoveToRow = prevMoveToRow;
+    lastMoveToCol = prevMoveToCol;
+    lastCaptured = prevCaptured;
+    prevMoveFromRow = -1;
+    prevMoveFromCol = -1;
+    prevMoveToRow = -1;
+    prevMoveToCol = -1;
+    prevCaptured = null;
+    myTurn = !myTurn;
+  }
+
+  clearSelection();
+  drawBoard();
+  currentTurn = myTurn ? myInfo.username : opponentInfo.username;
+  nudgeSent = false;
+  pendingUndoRequest = false;
+  stopMoveTimer();
+  updateTurnDisplay();
+  document.getElementById("btnUndo").classList.add("show");
+  if (myTurn) {
+    document.getElementById("btnNudge").classList.remove("show");
+    document.getElementById("statusText").textContent = "悔棋成功，轮到你了";
+  } else {
+    document.getElementById("btnNudge").classList.add("show");
+    document.getElementById("statusText").textContent = "等待对手落子...";
+  }
+  startMoveTimer();
 }
 
 // ============================================================

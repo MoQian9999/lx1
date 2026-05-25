@@ -1,0 +1,1780 @@
+// ============================================================
+// 飞行棋 (Ludo) — 游戏逻辑
+// 2-4 人，Canvas 绘制，postMessage 通信
+// ============================================================
+
+// ---------- 常量 ----------
+const GRID = 15;
+const CELL = 42;
+const MARGIN = 36;
+const PIECE_R = 13;
+const TRACK_COUNT = 52;
+const HOME_COUNT = 6;
+
+// 52 个轨道位置（顺时针，15x15 网格坐标 [row, col]）
+const TRACK_POSITIONS = [
+  [0,8], [1,8], [2,8], [3,8], [4,8], [5,8],   // 0-5: 顶臂右缘下行
+  [5,9],                                         // 6: 顶右角
+  [6,9], [6,10], [6,11], [6,12], [6,13], [6,14], // 7-12: 右臂上缘右行
+  [8,14], [8,13], [8,12], [8,11], [8,10], [8,9], // 13-18: 右臂下缘左行
+  [9,9],                                         // 19: 底右角
+  [9,8], [10,8], [11,8], [12,8], [13,8], [14,8], // 20-25: 底臂右缘下行
+  [14,6], [13,6], [12,6], [11,6], [10,6], [9,6], // 26-31: 底臂左缘上行
+  [9,5],                                         // 32: 底左角
+  [8,5], [8,4], [8,3], [8,2], [8,1], [8,0],     // 33-38: 左臂下缘左行
+  [6,0], [6,1], [6,2], [6,3], [6,4], [6,5],     // 39-44: 左臂上缘右行
+  [5,5],                                         // 45: 顶左角
+  [5,6], [4,6], [3,6], [2,6], [1,6], [0,6],     // 46-51: 顶臂左缘上行
+];
+
+// 玩家配置 [入口轨道位置, 颜色, 主场列, 基地位置]
+const PLAYER_CONFIG = [
+  { entryPos: 0,  color: "#e74c3c", name: "红", homeCol: [[1,7],[2,7],[3,7],[4,7],[5,7],[6,7]], base: [[1,1],[1,2],[2,1],[2,2]] },
+  { entryPos: 13, color: "#3498db", name: "蓝", homeCol: [[7,13],[7,12],[7,11],[7,10],[7,9],[7,8]], base: [[1,12],[1,13],[2,12],[2,13]] },
+  { entryPos: 26, color: "#2ecc71", name: "绿", homeCol: [[13,7],[12,7],[11,7],[10,7],[9,7],[8,7]], base: [[12,12],[12,13],[13,12],[13,13]] },
+  { entryPos: 39, color: "#f1c40f", name: "黄", homeCol: [[7,1],[7,2],[7,3],[7,4],[7,5],[7,6]], base: [[12,1],[12,2],[13,1],[13,2]] },
+];
+
+// 飞点 = 各玩家入口位置（轨道索引）
+const FLY_POINTS = [0, 13, 26, 39];
+
+// 安全格 = 入口 + 四角
+const SAFE_SQUARES = new Set([0, 6, 13, 19, 26, 32, 39, 45]);
+
+// ============================================================
+// 状态变量
+// ============================================================
+let myInfo = null;
+let allPlayers = [];          // [{ username, avatarText, textColor, borderColor, playerIndex }]
+let myPlayerIndex = -1;
+let playerCount = 0;
+let isHost = false;
+let hostUsername = null;
+let ruleFlags = {
+  flyOnFive: false,
+  overstepHome: false,
+  singleStackBothBack: false,
+  homeStacking: false,
+  dualColors: false,
+  teamMode: false,
+};
+let myReady = false;
+
+// 每个颜色的 4 颗棋子: pieces[colorIndex][pieceIndex] = { state, pos }
+// colorIndex: 0=红 1=蓝 2=绿 3=黄
+// playerControls[playerIndex] = [colorIndex, ...]
+let pieces = [[], [], [], []];
+let playerControls = [];
+
+// 回合管理
+let turnOrder = [];           // 玩家索引的有序数组
+let currentPlayerIndex = -1;
+let myTurn = false;
+let gameStarted = false;
+let gameOver = false;
+let turnPhase = "roll";       // "roll" | "move" | "pass"
+let diceValue = 1;
+let diceRolled = false;
+let consecutiveSixes = 0;
+let lastMovedPiece = null;    // { playerIndex, pieceIndex }
+let validMoves = [];
+let selectedPieceIndex = -1;
+let selectedColorIndex = -1;
+
+// Canvas
+let canvas = null;
+let ctx = null;
+let diceCanvas = null;
+let diceCtx = null;
+
+// 杂项
+let roomId = null;
+let thisGameName = "飞行棋";
+let nudgeSent = false;
+let moveTimeLeft = 60;
+let moveTimerInterval = null;
+let nudgeToastTimeout = null;
+
+// ============================================================
+// 初始化
+// ============================================================
+function init() {
+  canvas = document.getElementById("boardCanvas");
+  ctx = canvas.getContext("2d");
+  diceCanvas = document.getElementById("diceCanvas");
+  diceCtx = diceCanvas.getContext("2d");
+
+  const params = new URLSearchParams(window.location.search);
+  roomId = params.get("roomId");
+  thisGameName = params.get("gameName") || "飞行棋";
+  myInfo = {
+    username: params.get("username"),
+    avatarText: params.get("avatarText"),
+    textColor: params.get("textColor"),
+    borderColor: params.get("borderColor"),
+  };
+
+  const w = GRID * CELL + MARGIN * 2;
+  canvas.width = w;
+  canvas.height = w;
+  drawDie(1);
+
+  canvas.addEventListener("click", onCanvasClick);
+  window.addEventListener("message", onParentMessage);
+  sendToParent({ type: "game_ready" });
+
+  // 初始化赛前界面
+  buildRulePanel();
+  showWaiting("等待玩家加入...");
+}
+
+// ============================================================
+// 工具函数
+// ============================================================
+function cellToPixel(row, col) {
+  return { x: MARGIN + col * CELL + CELL / 2, y: MARGIN + row * CELL + CELL / 2 };
+}
+
+function sendToParent(msg) {
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage(msg, "*");
+  }
+}
+
+function showWaiting(text) {
+  document.getElementById("waitingText").textContent = text;
+  document.getElementById("waitingOverlay").classList.remove("hidden");
+}
+
+function hideWaiting() {
+  document.getElementById("waitingOverlay").classList.add("hidden");
+}
+
+function isFriendly(p1, p2) {
+  if (p1 === p2) return true;
+  if (ruleFlags.dualColors && playerCount === 2) {
+    const side1 = p1 % 2;
+    const side2 = p2 % 2;
+    return side1 === side2;
+  }
+  if (ruleFlags.teamMode && playerCount === 4) {
+    const team1 = p1 % 2;
+    const team2 = p2 % 2;
+    return team1 === team2;
+  }
+  return false;
+}
+
+function countPiecesAt(colorIndex, state, pos) {
+  if (!pieces[colorIndex]) return 0;
+  let count = 0;
+  for (const p of pieces[colorIndex]) {
+    if (p.state === state && p.pos === pos) count++;
+  }
+  return count;
+}
+
+function getPlayerColors(playerIndex) {
+  if (!playerControls[playerIndex]) return [playerIndex];
+  return playerControls[playerIndex];
+}
+
+function hasOpponentStack(myPlayerIndex, trackPos) {
+  const myColors = new Set(getPlayerColors(myPlayerIndex));
+  for (let ci = 0; ci < 4; ci++) {
+    if (myColors.has(ci)) continue;
+    if (isFriendlyColor(myPlayerIndex, ci)) continue;
+    if (countPiecesAt(ci, "track", trackPos) > 0) return true;
+  }
+  return false;
+}
+
+function hasFriendlyPieceAt(myPlayerIndex, state, pos) {
+  const myColors = getPlayerColors(myPlayerIndex);
+  for (const ci of myColors) {
+    if (countPiecesAt(ci, state, pos) > 0) return true;
+  }
+  return false;
+}
+
+function isFriendlyColor(playerIndex, colorIndex) {
+  const colors = getPlayerColors(playerIndex);
+  return colors.includes(colorIndex);
+}
+
+function getMyControlledColors() {
+  return getPlayerColors(myPlayerIndex);
+}
+
+function getMyAllPiecesFinished() {
+  for (const ci of getMyControlledColors()) {
+    for (const p of pieces[ci]) {
+      if (p.state !== "finished") return false;
+    }
+  }
+  return true;
+}
+
+function getTeamAllFinished(teamIndex) {
+  const members = teamIndex === 0 ? [0, 2] : [1, 3];
+  for (const ci of members) {
+    for (const p of pieces[ci]) {
+      if (p.state !== "finished") return false;
+    }
+  }
+  return true;
+}
+
+function isFriendly(p1, p2) {
+  if (p1 === p2) return true;
+  if (ruleFlags.dualColors && playerCount === 2) {
+    const colors1 = getPlayerColors(p1);
+    const colors2 = getPlayerColors(p2);
+    const sameSide = (colors1[0] % 2) === (colors2[0] % 2);
+    return sameSide;
+  }
+  if (ruleFlags.teamMode && playerCount === 4) {
+    const colors1 = getPlayerColors(p1);
+    const colors2 = getPlayerColors(p2);
+    return (colors1[0] % 2) === (colors2[0] % 2);
+  }
+  return false;
+}
+
+// ============================================================
+// 赛前界面
+// ============================================================
+function buildRulePanel() {
+  const ruleList = document.getElementById("ruleList");
+  const rules = [
+    { field: "flyOnFive", label: "五点可飞", hint: "掷出5时可选择飞行" },
+    { field: "overstepHome", label: "允许超步直达", hint: "超出步数仍可进家" },
+    { field: "singleStackBothBack", label: "单撞叠一起回", hint: "ON=单撞叠→双方都回；OFF=自己回" },
+    { field: "homeStacking", label: "主场可叠子", hint: "ON=主场列允许叠子" },
+    { field: "dualColors", label: "双人双色（2人）", hint: "每人控2色8棋子" },
+    { field: "teamMode", label: "组队模式（4人）", hint: "红+绿 vs 蓝+黄" },
+  ];
+
+  ruleList.innerHTML = "";
+  for (const rule of rules) {
+    const div = document.createElement("div");
+    div.className = "rule-item";
+    div.id = "ruleItem_" + rule.field;
+
+    const label = document.createElement("span");
+    label.className = "rule-label";
+    label.textContent = rule.label;
+
+    const hint = document.createElement("span");
+    hint.className = "rule-mode-hint";
+    hint.textContent = rule.hint;
+
+    const indicator = document.createElement("span");
+    indicator.className = "rule-indicator off";
+    indicator.id = "ruleInd_" + rule.field;
+    indicator.textContent = "✗";
+
+    div.appendChild(label);
+    div.appendChild(hint);
+    div.appendChild(indicator);
+
+    // 房主可点击切换
+    if (isHost) {
+      div.style.cursor = "pointer";
+      div.addEventListener("click", (function(f) { return function() { onRuleToggle(f); }; })(rule.field));
+    }
+
+    ruleList.appendChild(div);
+  }
+}
+
+function updateRuleIndicators() {
+  for (const field of Object.keys(ruleFlags)) {
+    const ind = document.getElementById("ruleInd_" + field);
+    if (!ind) continue;
+    const val = ruleFlags[field];
+    ind.textContent = val ? "✓" : "✗";
+    ind.className = "rule-indicator " + (val ? "on" : "off");
+  }
+}
+
+function onRuleToggle(field) {
+  if (!isHost) return;
+  ruleFlags[field] = !ruleFlags[field];
+
+  // 互斥限制：dualColors 和 teamMode 不能同时开启
+  if (field === "dualColors" && ruleFlags.dualColors) {
+    ruleFlags.teamMode = false;
+  }
+  if (field === "teamMode" && ruleFlags.teamMode) {
+    ruleFlags.dualColors = false;
+  }
+
+  updateRuleIndicators();
+  updatePrePlayerList(allPlayers);
+
+  sendToParent({ type: "game_action", action: "rule_change", data: { field: field, value: ruleFlags[field] } });
+}
+
+function updatePrePlayerList(players) {
+  allPlayers = players;
+  if (!allPlayers || allPlayers.length === 0) return;
+  playerCount = allPlayers.length;
+
+  // 更新房主
+  if (!hostUsername && allPlayers.length > 0) {
+    hostUsername = allPlayers[0].username;
+    isHost = (myInfo.username === hostUsername);
+    buildRulePanel();
+  }
+
+  const container = document.getElementById("prePlayerItems");
+  container.innerHTML = "";
+
+  for (let i = 0; i < allPlayers.length; i++) {
+    const p = allPlayers[i];
+    const div = document.createElement("div");
+    div.className = "pre-player-item";
+
+    const avatar = document.createElement("div");
+    avatar.className = "pre-player-avatar";
+    avatar.style.backgroundColor = p.borderColor || "#ccc";
+    avatar.style.color = p.textColor || "#fff";
+    avatar.textContent = (p.avatarText || p.username || "?").substring(0, 6);
+
+    const name = document.createElement("span");
+    name.className = "pre-player-name";
+    name.textContent = p.username;
+
+    const ready = document.createElement("span");
+    ready.className = "pre-player-ready waiting";
+    ready.textContent = p.ready ? "✓ 已准备" : "⏳ 等待中";
+    if (p.ready) ready.classList.add("ready");
+
+    div.appendChild(avatar);
+    div.appendChild(name);
+    if (p.username === hostUsername) {
+      const hostTag = document.createElement("span");
+      hostTag.className = "pre-player-host";
+      hostTag.textContent = "房主";
+      div.appendChild(hostTag);
+    }
+    div.appendChild(ready);
+    container.appendChild(div);
+  }
+
+  updateRuleIndicators();
+}
+
+function toggleReady() {
+  myReady = !myReady;
+  sendToParent({ type: "set_ready", ready: myReady });
+  const btn = document.getElementById("btnReady");
+  if (myReady) {
+    btn.textContent = "取消准备";
+    btn.classList.add("is-ready");
+  } else {
+    btn.textContent = "准备";
+    btn.classList.remove("is-ready");
+  }
+}
+
+function leaveRoom() {
+  sendToParent({ type: "leave_room" });
+}
+
+// ============================================================
+// 对局界面
+// ============================================================
+function buildPlayerHeader() {
+  const header = document.getElementById("playerHeader");
+  header.innerHTML = "";
+
+  for (let i = 0; i < playerCount; i++) {
+    const cfg = PLAYER_CONFIG[i];
+    const ap = allPlayers[i];
+    const div = document.createElement("div");
+    div.className = "player-info";
+    div.id = "playerInfo_" + i;
+
+    const dot = document.createElement("div");
+    dot.className = "player-color-dot";
+    dot.style.backgroundColor = cfg.color;
+
+    const avatar = document.createElement("div");
+    avatar.className = "player-avatar";
+    avatar.style.backgroundColor = ap.borderColor || "#ccc";
+    avatar.style.color = ap.textColor || "#fff";
+    avatar.textContent = (ap.avatarText || ap.username || "?").substring(0, 3);
+
+    const name = document.createElement("span");
+    name.className = "player-name";
+    name.textContent = ap.username;
+
+    const progress = document.createElement("span");
+    progress.className = "player-progress";
+    progress.id = "playerProgress_" + i;
+    progress.textContent = "0/4";
+
+    div.appendChild(dot);
+    div.appendChild(avatar);
+    div.appendChild(name);
+    div.appendChild(progress);
+    header.appendChild(div);
+  }
+}
+
+function updatePlayerHeader() {
+  for (let i = 0; i < playerCount; i++) {
+    const info = document.getElementById("playerInfo_" + i);
+    const progress = document.getElementById("playerProgress_" + i);
+    if (!info || !progress) continue;
+
+    if (i === currentPlayerIndex && !gameOver) {
+      info.classList.add("current-turn");
+    } else {
+      info.classList.remove("current-turn");
+    }
+
+    const colors = getPlayerColors(i);
+    let finished = 0;
+    let total = colors.length * 4;
+    for (const ci of colors) {
+      for (const p of pieces[ci]) {
+        if (p.state === "finished") finished++;
+      }
+    }
+    progress.textContent = finished + "/" + total;
+
+    if (finished === total) {
+      info.classList.add("finished");
+    } else {
+      info.classList.remove("finished");
+    }
+  }
+}
+
+// ============================================================
+// Canvas 渲染
+// ============================================================
+function drawBoard() {
+  const w = canvas.width;
+  const h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  // 背景
+  ctx.fillStyle = "#f0d9b5";
+  ctx.fillRect(0, 0, w, h);
+
+  drawCrossCells();
+  drawTrackCells();
+  drawHomeColumns();
+  drawBaseAreas();
+  drawCenter();
+  drawPieces();
+
+  // 绘制高亮目标
+  if (turnPhase === "move" && selectedPieceIndex >= 0) {
+    drawMoveHighlights();
+  }
+}
+
+function drawCrossCells() {
+  for (let r = 0; r < GRID; r++) {
+    for (let c = 0; c < GRID; c++) {
+      const inCross = (c >= 6 && c <= 8) || (r >= 6 && r <= 8);
+      if (inCross) {
+        // 检查是否是主场列
+        const isHomeCol = isHomeColumnCell(r, c);
+        const pos = cellToPixel(r, c);
+        ctx.fillStyle = isHomeCol ? "#e8dcc8" : "#f5e6cc";
+        ctx.fillRect(pos.x - CELL / 2 + 1, pos.y - CELL / 2 + 1, CELL - 2, CELL - 2);
+        ctx.strokeStyle = "#d4c4a8";
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(pos.x - CELL / 2, pos.y - CELL / 2, CELL, CELL);
+      }
+    }
+  }
+}
+
+function isHomeColumnCell(r, c) {
+  for (let pi = 0; pi < 4; pi++) {
+    for (const hc of PLAYER_CONFIG[pi].homeCol) {
+      if (hc[0] === r && hc[1] === c) return pi;
+    }
+  }
+  return -1;
+}
+
+function drawTrackCells() {
+  for (let i = 0; i < TRACK_COUNT; i++) {
+    const [r, c] = TRACK_POSITIONS[i];
+    const pos = cellToPixel(r, c);
+    const isFly = FLY_POINTS.includes(i);
+    const isSafe = SAFE_SQUARES.has(i);
+    const isCorner = [6, 19, 32, 45].includes(i);
+
+    // 飞点 / 入口着色
+    if (isFly) {
+      const ownerIdx = FLY_POINTS.indexOf(i);
+      ctx.fillStyle = PLAYER_CONFIG[ownerIdx].color;
+      ctx.globalAlpha = 0.3;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, CELL / 2 - 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // 轨道点
+    ctx.fillStyle = "#fff";
+    ctx.strokeStyle = "#999";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // 角落特殊标记
+    if (isCorner) {
+      ctx.fillStyle = "#333";
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 飞点星标
+    if (isFly) {
+      const ownerIdx = FLY_POINTS.indexOf(i);
+      ctx.fillStyle = PLAYER_CONFIG[ownerIdx].color;
+      ctx.font = "bold 10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("★", pos.x, pos.y);
+    }
+  }
+}
+
+function drawHomeColumns() {
+  const activeColors = getActiveColors();
+  for (const ci of activeColors) {
+    const cfg = PLAYER_CONFIG[ci];
+    for (let h = 0; h < HOME_COUNT; h++) {
+      const [r, c] = cfg.homeCol[h];
+      const pos = cellToPixel(r, c);
+      ctx.fillStyle = cfg.color;
+      ctx.globalAlpha = 0.25;
+      ctx.fillRect(pos.x - CELL / 2 + 1, pos.y - CELL / 2 + 1, CELL - 2, CELL - 2);
+      ctx.globalAlpha = 1;
+
+      // 圆点
+      ctx.fillStyle = "#fff";
+      ctx.strokeStyle = cfg.color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // 终点标记（最后一格）
+      if (h === HOME_COUNT - 1) {
+        ctx.fillStyle = cfg.color;
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+}
+
+function drawBaseAreas() {
+  const activeColors = getActiveColors();
+  for (const ci of activeColors) {
+    const cfg = PLAYER_CONFIG[ci];
+    // 绘制基地背景
+    const [r0, c0] = cfg.base[0];
+    const [r3, c3] = cfg.base[3];
+    const p0 = cellToPixel(r0, c0);
+    const p3 = cellToPixel(r3, c3);
+
+    const x = Math.min(p0.x, p3.x) - CELL / 2 - 4;
+    const y = Math.min(p0.y, p3.y) - CELL / 2 - 4;
+    const bw = Math.abs(p3.x - p0.x) + CELL + 8;
+    const bh = Math.abs(p3.y - p0.y) + CELL + 8;
+
+    ctx.fillStyle = cfg.color;
+    ctx.globalAlpha = 0.2;
+    ctx.beginPath();
+    ctx.roundRect(x, y, bw, bh, 8);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.strokeStyle = cfg.color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(x, y, bw, bh, 8);
+    ctx.stroke();
+
+    // 4 个棋子槽
+    for (const [br, bc] of cfg.base) {
+      const bp = cellToPixel(br, bc);
+      ctx.fillStyle = "#fff";
+      ctx.strokeStyle = cfg.color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(bp.x, bp.y, PIECE_R + 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+}
+
+function drawCenter() {
+  const center = cellToPixel(7, 7);
+  // 四色三角形
+  const colors = [
+    PLAYER_CONFIG[0].color,
+    PLAYER_CONFIG[1].color,
+    PLAYER_CONFIG[2].color,
+    PLAYER_CONFIG[3].color,
+  ];
+  for (let i = 0; i < 4; i++) {
+    const angle = (i * Math.PI) / 2 - Math.PI / 4;
+    const size = CELL * 1.2;
+    ctx.fillStyle = colors[i];
+    ctx.globalAlpha = 0.35;
+    ctx.beginPath();
+    ctx.moveTo(center.x, center.y);
+    ctx.arc(center.x, center.y, size, angle, angle + Math.PI / 2);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // 中心圆
+  ctx.fillStyle = "#fff";
+  ctx.strokeStyle = "#333";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(center.x, center.y, 14, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#333";
+  ctx.font = "bold 8px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("HOME", center.x, center.y);
+}
+
+function getActiveColors() {
+  const colors = new Set();
+  for (const ctr of playerControls) {
+    for (const ci of ctr) colors.add(ci);
+  }
+  return colors;
+}
+
+function drawPieces() {
+  let hasSelected = selectedPieceIndex >= 0;
+  const activeColors = getActiveColors();
+
+  for (const ci of activeColors) {
+    const cfg = PLAYER_CONFIG[ci];
+
+    for (let i = 0; i < (pieces[ci] ? pieces[ci].length : 0); i++) {
+      const piece = pieces[ci][i];
+      let px, py;
+
+      if (piece.state === "base") {
+        const [br, bc] = cfg.base[i];
+        const bp = cellToPixel(br, bc);
+        const ox = (i % 2) * 6 - 3;
+        const oy = (Math.floor(i / 2) % 2) * 6 - 3;
+        px = bp.x + ox;
+        py = bp.y + oy;
+      } else if (piece.state === "track") {
+        const [tr, tc] = TRACK_POSITIONS[piece.pos];
+        const tp = cellToPixel(tr, tc);
+        const stackIdx = getStackOffset(ci, "track", piece.pos, i);
+        px = tp.x + stackIdx * 5;
+        py = tp.y + stackIdx * 3;
+      } else if (piece.state === "home") {
+        const [hr, hc] = cfg.homeCol[piece.pos];
+        const hp = cellToPixel(hr, hc);
+        const stackIdx = ruleFlags.homeStacking ? getStackOffset(ci, "home", piece.pos, i) : 0;
+        px = hp.x + stackIdx * 4;
+        py = hp.y + stackIdx * 2;
+      } else if (piece.state === "finished") {
+        const cp = cellToPixel(7, 7);
+        const fi = getFinishedOffset(ci, i);
+        px = cp.x + (fi % 4 - 1.5) * 10;
+        py = cp.y + (Math.floor(fi / 4) - 1.5) * 10;
+      } else {
+        continue;
+      }
+
+      // Determine if player controls this color for selection highlight
+      const ownerPlayer = findPlayerByColor(ci);
+      const isSelected = hasSelected && myTurn && ownerPlayer === myPlayerIndex && ci === (selectedColorIndex || -1) && i === selectedPieceIndex;
+      if (isSelected) {
+        ctx.shadowColor = "#f1c40f";
+        ctx.shadowBlur = 12;
+      }
+
+      const grad = ctx.createRadialGradient(px - 2, py - 2, 1, px, py, PIECE_R);
+      grad.addColorStop(0, "#fff");
+      grad.addColorStop(0.4, cfg.color);
+      grad.addColorStop(1, "#000");
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(px, py, PIECE_R, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = "#333";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
+
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 9px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText((i + 1).toString(), px, py);
+
+      const stackSize = countPiecesAt(ci, piece.state, piece.pos);
+      if (stackSize > 1 && i === getFirstPieceInStack(ci, piece.state, piece.pos)) {
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 12px sans-serif";
+        ctx.fillText("×" + stackSize, px + PIECE_R + 4, py - PIECE_R);
+      }
+    }
+  }
+}
+
+function getStackOffset(colorIndex, state, pos, pieceIndex) {
+  let count = 0;
+  for (let i = 0; i < pieceIndex; i++) {
+    if (pieces[colorIndex][i].state === state && pieces[colorIndex][i].pos === pos) count++;
+  }
+  return count;
+}
+
+function getFirstPieceInStack(colorIndex, state, pos) {
+  for (let i = 0; i < pieces[colorIndex].length; i++) {
+    if (pieces[colorIndex][i].state === state && pieces[colorIndex][i].pos === pos) return i;
+  }
+  return -1;
+}
+
+function getFinishedOffset(colorIndex, pieceIndex) {
+  return colorIndex * 4 + pieceIndex;
+}
+
+function drawMoveHighlights() {
+  for (const move of validMoves) {
+    if (move.pieceIndex !== selectedPieceIndex || move.colorIndex !== selectedColorIndex) continue;
+    let px, py;
+    if (move.toState === "track") {
+      const [tr, tc] = TRACK_POSITIONS[move.toPos];
+      const tp = cellToPixel(tr, tc);
+      px = tp.x; py = tp.y;
+    } else if (move.toState === "home") {
+      const cfg = PLAYER_CONFIG[move.colorIndex];
+      const [hr, hc] = cfg.homeCol[move.toPos];
+      const hp = cellToPixel(hr, hc);
+      px = hp.x; py = hp.y;
+    } else if (move.toState === "finished") {
+      const cp = cellToPixel(7, 7);
+      px = cp.x; py = cp.y;
+    } else {
+      continue;
+    }
+
+    ctx.fillStyle = "rgba(241, 196, 15, 0.5)";
+    ctx.strokeStyle = "#f1c40f";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(px, py, PIECE_R + 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
+// ============================================================
+// 骰子绘制
+// ============================================================
+function drawDie(value) {
+  const dctx = diceCtx;
+  const dw = diceCanvas.width;
+  const dh = diceCanvas.height;
+  dctx.clearRect(0, 0, dw, dh);
+
+  // 背景
+  dctx.fillStyle = "#f5f0e8";
+  dctx.beginPath();
+  dctx.roundRect(2, 2, dw - 4, dh - 4, 8);
+  dctx.fill();
+
+  dctx.strokeStyle = "#999";
+  dctx.lineWidth = 2;
+  dctx.beginPath();
+  dctx.roundRect(2, 2, dw - 4, dh - 4, 8);
+  dctx.stroke();
+
+  // 点数
+  const cx = dw / 2;
+  const cy = dh / 2;
+  const r = 5;
+  const positions = {
+    1: [[cx, cy]],
+    2: [[cx - 12, cy - 12], [cx + 12, cy + 12]],
+    3: [[cx - 12, cy - 12], [cx, cy], [cx + 12, cy + 12]],
+    4: [[cx - 12, cy - 12], [cx + 12, cy - 12], [cx - 12, cy + 12], [cx + 12, cy + 12]],
+    5: [[cx - 12, cy - 12], [cx + 12, cy - 12], [cx, cy], [cx - 12, cy + 12], [cx + 12, cy + 12]],
+    6: [[cx - 12, cy - 12], [cx + 12, cy - 12], [cx - 12, cy], [cx + 12, cy], [cx - 12, cy + 12], [cx + 12, cy + 12]],
+  };
+
+  dctx.fillStyle = "#333";
+  for (const [px, py] of (positions[value] || positions[1])) {
+    dctx.beginPath();
+    dctx.arc(px, py, r, 0, Math.PI * 2);
+    dctx.fill();
+  }
+}
+
+// ============================================================
+// 移动验证
+// ============================================================
+function getValidMoves(playerIndex, dieVal) {
+  const moves = [];
+  const colors = getPlayerColors(playerIndex);
+
+  for (const ci of colors) {
+    const entryPos = PLAYER_CONFIG[ci].entryPos;
+
+    for (let i = 0; i < 4; i++) {
+      const piece = pieces[ci][i];
+      if (piece.state === "finished") continue;
+
+      if (piece.state === "base") {
+        if (dieVal === 6) {
+          const oppStack = getOpponentStackSizeAt(playerIndex, entryPos);
+          if (oppStack > 0 && !ruleFlags.singleStackBothBack) {
+            continue;
+          }
+          moves.push({ colorIndex: ci, pieceIndex: i, fromState: "base", toState: "track", toPos: entryPos });
+        }
+        continue;
+      }
+
+      if (piece.state === "track") {
+        const stepsToHome = (entryPos - 1 - piece.pos + TRACK_COUNT) % TRACK_COUNT;
+
+        if (dieVal <= stepsToHome) {
+          const newPos = (piece.pos + dieVal) % TRACK_COUNT;
+          if (isPathBlocked(playerIndex, piece.pos, newPos, dieVal)) continue;
+
+          const myStackSize = countPiecesAt(ci, "track", piece.pos);
+          const oppStackSize = getOpponentStackSizeAt(playerIndex, newPos);
+          if (oppStackSize > 0 && myStackSize === 1 && oppStackSize > 1 && !ruleFlags.singleStackBothBack) {
+            continue;
+          }
+
+          // Check safe squares
+          if (SAFE_SQUARES.has(newPos)) {
+            moves.push({ colorIndex: ci, pieceIndex: i, fromState: "track", fromPos: piece.pos, toState: "track", toPos: newPos });
+          } else {
+            moves.push({ colorIndex: ci, pieceIndex: i, fromState: "track", fromPos: piece.pos, toState: "track", toPos: newPos });
+          }
+        } else {
+          const overshoot = dieVal - stepsToHome;
+          if (overshoot >= 1 && overshoot <= HOME_COUNT) {
+            const homeIdx = overshoot - 1;
+            if (!ruleFlags.homeStacking && hasFriendlyPieceAt(playerIndex, "home", homeIdx)) continue;
+            moves.push({ colorIndex: ci, pieceIndex: i, fromState: "track", fromPos: piece.pos, toState: "home", toPos: homeIdx });
+          } else if (overshoot === HOME_COUNT + 1) {
+            moves.push({ colorIndex: ci, pieceIndex: i, fromState: "track", fromPos: piece.pos, toState: "finished", toPos: -1 });
+          } else if (overshoot > HOME_COUNT + 1) {
+            if (ruleFlags.overstepHome) {
+              moves.push({ colorIndex: ci, pieceIndex: i, fromState: "track", fromPos: piece.pos, toState: "finished", toPos: -1 });
+            }
+          }
+        }
+      }
+
+      if (piece.state === "home") {
+        const newHomeIdx = piece.pos + dieVal;
+        if (newHomeIdx === HOME_COUNT) {
+          moves.push({ colorIndex: ci, pieceIndex: i, fromState: "home", fromPos: piece.pos, toState: "finished", toPos: -1 });
+        } else if (newHomeIdx < HOME_COUNT) {
+          if (!ruleFlags.homeStacking && hasFriendlyPieceAt(playerIndex, "home", newHomeIdx)) continue;
+          moves.push({ colorIndex: ci, pieceIndex: i, fromState: "home", fromPos: piece.pos, toState: "home", toPos: newHomeIdx });
+        }
+      }
+    }
+  }
+
+  return moves;
+}
+
+function isPathBlocked(playerIndex, fromPos, toPos, steps) {
+  for (let s = 1; s < steps; s++) {
+    const midPos = (fromPos + s) % TRACK_COUNT;
+    if (hasOpponentStack(playerIndex, midPos)) return true;
+  }
+  return false;
+}
+
+function getOpponentStackSizeAt(myPlayerIndex, trackPos) {
+  const myColors = new Set(getPlayerColors(myPlayerIndex));
+  let maxSize = 0;
+  for (let ci = 0; ci < 4; ci++) {
+    if (myColors.has(ci) || isFriendlyColor(myPlayerIndex, ci)) continue;
+    const sz = countPiecesAt(ci, "track", trackPos);
+    if (sz > maxSize) maxSize = sz;
+  }
+  return maxSize;
+}
+
+// ============================================================
+// 移动执行
+// ============================================================
+function executeMove(colorIndex, pieceIndex, move) {
+  const piece = pieces[colorIndex][pieceIndex];
+  piece.state = move.toState;
+  piece.pos = move.toState === "finished" ? -1 : move.toPos;
+  lastMovedPiece = { colorIndex, pieceIndex };
+
+  // 检测飞行（落在飞点）
+  if (move.toState === "track" && FLY_POINTS.includes(move.toPos)) {
+    const flyIdx = FLY_POINTS.indexOf(move.toPos);
+    if (flyIdx === colorIndex) {
+      const nextFly = (move.toPos + 13) % TRACK_COUNT;
+      if (FLY_POINTS.includes(nextFly)) {
+        piece.pos = nextFly;
+      }
+    }
+  }
+
+  // 检测踩回
+  if (move.toState === "track") {
+    const myStackSize = countPiecesAt(colorIndex, "track", piece.pos);
+    checkCapture(colorIndex, piece.pos, myStackSize);
+  }
+
+  // 检测飞行连锁（飞后落飞点）
+  if (piece.state === "track" && FLY_POINTS.includes(piece.pos)) {
+    const flyIdx = FLY_POINTS.indexOf(piece.pos);
+    if (flyIdx === colorIndex) {
+      const nextFly = (piece.pos + 13) % TRACK_COUNT;
+      if (FLY_POINTS.includes(nextFly)) {
+        piece.pos = nextFly;
+        if (piece.state === "track") {
+          const myStackSize = countPiecesAt(colorIndex, "track", piece.pos);
+          checkCapture(colorIndex, piece.pos, myStackSize);
+        }
+      }
+    }
+  }
+}
+
+function checkCapture(colorIndex, trackPos, myStackSize) {
+  if (SAFE_SQUARES.has(trackPos)) return;
+
+  const myPlayer = findPlayerByColor(colorIndex);
+
+  for (let ci = 0; ci < 4; ci++) {
+    if (ci === colorIndex || isFriendlyColor(myPlayer, ci)) continue;
+
+    const oppStackSize = countPiecesAt(ci, "track", trackPos);
+    if (oppStackSize === 0) continue;
+
+    if (myStackSize === 1 && oppStackSize > 1) {
+      if (ruleFlags.singleStackBothBack) {
+        sendPiecesToBase(colorIndex, "track", trackPos);
+        sendPiecesToBase(ci, "track", trackPos);
+      } else {
+        sendPiecesToBase(colorIndex, "track", trackPos);
+      }
+    } else if (myStackSize >= oppStackSize) {
+      sendPiecesToBase(ci, "track", trackPos);
+    } else {
+      sendPiecesToBase(colorIndex, "track", trackPos);
+    }
+  }
+}
+
+function sendPiecesToBase(colorIndex, state, pos) {
+  for (const p of pieces[colorIndex]) {
+    if (p.state === state && p.pos === pos) {
+      p.state = "base";
+      p.pos = -1;
+    }
+  }
+}
+
+function findPlayerByColor(colorIndex) {
+  for (let pi = 0; pi < playerControls.length; pi++) {
+    if (playerControls[pi].includes(colorIndex)) return pi;
+  }
+  return colorIndex;
+}
+
+function checkWinForPlayer(playerIndex) {
+  const colors = getPlayerColors(playerIndex);
+  for (const ci of colors) {
+    for (const p of pieces[ci]) {
+      if (p.state !== "finished") return false;
+    }
+  }
+  return true;
+}
+
+function checkWinForColor(colorIndex) {
+  return pieces[colorIndex].every(p => p.state === "finished");
+}
+
+function checkTeamWin(teamIndex) {
+  return getTeamAllFinished(teamIndex);
+}
+
+function checkDualColorWin(playerIndex) {
+  return checkWinForPlayer(playerIndex);
+}
+
+// ============================================================
+// 回合管理
+// ============================================================
+function advanceTurn() {
+  if (gameOver) return;
+  selectedPieceIndex = -1;
+  selectedColorIndex = -1;
+  validMoves = [];
+  turnPhase = "roll";
+  diceRolled = false;
+  nudgeSent = false;
+
+  // 重置连续 6 计数（如果非 6 或惩罚）
+  if (diceValue !== 6 || consecutiveSixes === 0) {
+    // consecutiveSixes already reset if not 6
+  }
+
+  // 额外回合？
+  if (diceValue === 6 && consecutiveSixes < 3) {
+    // 同一玩家继续
+    myTurn = (currentPlayerIndex === myPlayerIndex);
+  } else {
+    // 下一个玩家
+    const idx = turnOrder.indexOf(currentPlayerIndex);
+    const nextIdx = (idx + 1) % turnOrder.length;
+    currentPlayerIndex = turnOrder[nextIdx];
+    myTurn = (currentPlayerIndex === myPlayerIndex);
+    consecutiveSixes = 0;
+  }
+
+  updateTurnUI();
+  if (myTurn) {
+    startMoveTimer();
+  }
+  drawBoard();
+  updatePlayerHeader();
+}
+
+function updateTurnUI() {
+  const rollBtn = document.getElementById("btnRoll");
+  const flyBtn = document.getElementById("btnFly");
+  const nudgeBtn = document.getElementById("btnNudge");
+  const status = document.getElementById("statusText");
+
+  if (myTurn && turnPhase === "roll") {
+    rollBtn.disabled = false;
+    rollBtn.style.display = "";
+    flyBtn.style.display = "none";
+    nudgeBtn.classList.remove("show");
+    status.textContent = "请掷骰子";
+  } else if (myTurn && turnPhase === "move") {
+    rollBtn.disabled = true;
+    flyBtn.style.display = (diceValue === 5 && ruleFlags.flyOnFive) ? "" : "none";
+    nudgeBtn.classList.remove("show");
+    status.textContent = "请选择棋子移动（骰子: " + diceValue + "）";
+  } else if (!myTurn && !gameOver) {
+    rollBtn.disabled = true;
+    flyBtn.style.display = "none";
+    nudgeBtn.classList.add("show");
+    const cp = allPlayers[currentPlayerIndex];
+    status.textContent = "等待 " + (cp ? cp.username : "?") + " 行动...";
+  }
+
+  updatePlayerHeader();
+}
+
+// ============================================================
+// 用户交互
+// ============================================================
+function rollDice() {
+  if (!myTurn || turnPhase !== "roll" || gameOver) return;
+
+  const value = Math.floor(Math.random() * 6) + 1;
+
+  // 发送并本地应用
+  sendToParent({ type: "game_action", action: "dice_roll", data: { value: value } });
+  applyDiceRoll(value);
+}
+
+function applyDiceRoll(value) {
+  diceValue = value;
+  drawDie(value);
+  diceRolled = true;
+
+  if (value === 6) {
+    consecutiveSixes++;
+  } else {
+    consecutiveSixes = 0;
+  }
+
+  // 连掷三次 6 惩罚
+  if (consecutiveSixes === 3) {
+    if (lastMovedPiece) {
+      const lp = pieces[lastMovedPiece.colorIndex][lastMovedPiece.pieceIndex];
+      if (lp.state !== "base" && lp.state !== "finished") {
+        lp.state = "base";
+        lp.pos = -1;
+      }
+    }
+    consecutiveSixes = 0;
+    lastMovedPiece = null;
+    if (myTurn) {
+      showSixPenalty();
+      setTimeout(() => { hideSixPenalty(); advanceTurn(); }, 1500);
+    } else {
+      advanceTurn();
+      drawBoard();
+      updatePlayerHeader();
+    }
+    return;
+  }
+
+  // 计算合法移动（仅当前回合玩家需要交互，其他玩家仅更新状态）
+  if (myTurn) {
+    validMoves = getValidMoves(currentPlayerIndex, value);
+
+    if (validMoves.length === 0) {
+      turnPhase = "pass";
+      updateTurnUI();
+      document.getElementById("statusText").textContent = "无合法移动，跳过回合";
+      setTimeout(() => advanceTurn(), 1000);
+      return;
+    }
+
+    turnPhase = "move";
+    selectedPieceIndex = -1;
+    selectedColorIndex = -1;
+    updateTurnUI();
+    drawBoard();
+
+    const uniqueKeys = [...new Set(validMoves.map(m => m.colorIndex + ":" + m.pieceIndex))];
+    if (uniqueKeys.length === 1) {
+      const [ci, pi] = uniqueKeys[0].split(":").map(Number);
+      selectedColorIndex = ci;
+      selectedPieceIndex = pi;
+      drawBoard();
+    }
+  } else {
+    // 远程玩家：只更新显示
+    validMoves = [];
+    selectedPieceIndex = -1;
+    updateTurnUI();
+    drawBoard();
+    updatePlayerHeader();
+  }
+}
+
+function chooseFly() {
+  if (!myTurn || turnPhase !== "move" || diceValue !== 5 || !ruleFlags.flyOnFive || gameOver) return;
+
+  const myColors = getMyControlledColors();
+  for (const ci of myColors) {
+    for (let i = 0; i < 4; i++) {
+      const p = pieces[ci][i];
+      if (p.state === "track") {
+        let nextFly = -1;
+        for (const fp of FLY_POINTS) {
+          if (fp > p.pos) { nextFly = fp; break; }
+        }
+        if (nextFly === -1) nextFly = FLY_POINTS[0];
+
+        const move = { colorIndex: ci, pieceIndex: i, fromState: "track", fromPos: p.pos, toState: "track", toPos: nextFly };
+        sendToParent({ type: "game_action", action: "piece_fly", data: { colorIndex: ci, pieceIndex: i, toPos: nextFly } });
+        executeMove(ci, i, move);
+
+        if (checkWinForPlayer(myPlayerIndex)) {
+          handleMyWin();
+        } else {
+          advanceTurn();
+        }
+        return;
+      }
+    }
+  }
+  document.getElementById("statusText").textContent = "无可飞行的棋子";
+}
+
+function onCanvasClick(e) {
+  if (!myTurn || turnPhase !== "move" || gameOver) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top) * scaleY;
+
+  // Check if clicked a highlighted target
+  if (selectedPieceIndex >= 0 && selectedColorIndex >= 0) {
+    for (const move of validMoves) {
+      if (move.pieceIndex !== selectedPieceIndex || move.colorIndex !== selectedColorIndex) continue;
+      const target = getMoveTargetPixel(move);
+      const dist = Math.hypot(mx - target.x, my - target.y);
+      if (dist < PIECE_R + 10) {
+        executeSelectedMove(move);
+        return;
+      }
+    }
+  }
+
+  // Check if clicked own piece
+  const myColors = getMyControlledColors();
+  let clickedPiece = -1, clickedCI = -1;
+  let minDist = Infinity;
+
+  for (const ci of myColors) {
+    for (let i = 0; i < 4; i++) {
+      const p = pieces[ci][i];
+      if (p.state === "finished") continue;
+      const pos = getPiecePixel(ci, i);
+      if (!pos) continue;
+      const dist = Math.hypot(mx - pos.x, my - pos.y);
+      if (dist < PIECE_R + 5 && dist < minDist) {
+        minDist = dist;
+        clickedPiece = i;
+        clickedCI = ci;
+      }
+    }
+  }
+
+  if (clickedCI >= 0) {
+    const hasMoves = validMoves.some(m => m.colorIndex === clickedCI && m.pieceIndex === clickedPiece);
+    if (hasMoves) {
+      selectedColorIndex = clickedCI;
+      selectedPieceIndex = clickedPiece;
+      drawBoard();
+    }
+  } else {
+    selectedColorIndex = -1;
+    selectedPieceIndex = -1;
+    drawBoard();
+  }
+}
+
+function getMoveTargetPixel(move) {
+  if (move.toState === "track") {
+    const [r, c] = TRACK_POSITIONS[move.toPos];
+    return cellToPixel(r, c);
+  } else if (move.toState === "home") {
+    const cfg = PLAYER_CONFIG[move.colorIndex];
+    const [r, c] = cfg.homeCol[move.toPos];
+    return cellToPixel(r, c);
+  } else {
+    return cellToPixel(7, 7);
+  }
+}
+
+function getPiecePixel(colorIndex, pieceIndex) {
+  const piece = pieces[colorIndex][pieceIndex];
+  const cfg = PLAYER_CONFIG[colorIndex];
+  if (piece.state === "base") {
+    const [r, c] = cfg.base[pieceIndex];
+    return cellToPixel(r, c);
+  } else if (piece.state === "track") {
+    const [r, c] = TRACK_POSITIONS[piece.pos];
+    return cellToPixel(r, c);
+  } else if (piece.state === "home") {
+    const [r, c] = cfg.homeCol[piece.pos];
+    return cellToPixel(r, c);
+  } else {
+    return cellToPixel(7, 7);
+  }
+}
+
+function executeSelectedMove(move) {
+  stopMoveTimer();
+
+  sendToParent({ type: "game_action", action: "piece_move", data: {
+    colorIndex: move.colorIndex,
+    pieceIndex: move.pieceIndex,
+    toState: move.toState,
+    toPos: move.toPos,
+  }});
+
+  executeMove(move.colorIndex, move.pieceIndex, move);
+
+  if (checkWinForPlayer(myPlayerIndex)) {
+    handleMyWin();
+    return;
+  }
+
+  if (ruleFlags.teamMode && playerCount === 4) {
+    const teamIdx = myPlayerIndex % 2;
+    if (checkTeamWin(teamIdx)) {
+      handleTeamWin(teamIdx);
+      return;
+    }
+  }
+
+  advanceTurn();
+}
+
+function handleMyWin() {
+  gameOver = true;
+  stopMoveTimer();
+  myTurn = false;
+  document.getElementById("statusText").textContent = "你赢了！";
+  document.getElementById("btnSurrender").classList.remove("show");
+  document.getElementById("btnNudge").classList.remove("show");
+  document.getElementById("btnPlayAgain").classList.add("show");
+  document.getElementById("btnRoll").disabled = true;
+
+  if (ruleFlags.teamMode && playerCount === 4) {
+    const teamIdx = myPlayerIndex % 2;
+    const winners = allPlayers.filter((_, i) => i % 2 === teamIdx).map(p => p.username);
+    sendToParent({ type: "game_over", gameName: thisGameName, result: "win", isDraw: false, winners: winners });
+  } else {
+    sendToParent({ type: "game_over", gameName: thisGameName, result: "win", isDraw: false });
+  }
+  drawBoard();
+  updatePlayerHeader();
+}
+
+function handleTeamWin(teamIdx) {
+  gameOver = true;
+  stopMoveTimer();
+  myTurn = false;
+
+  const iAmWinner = (myPlayerIndex % 2 === teamIdx);
+  document.getElementById("statusText").textContent = iAmWinner ? "你们队赢了！" : "对方队伍赢了！";
+  document.getElementById("btnSurrender").classList.remove("show");
+  document.getElementById("btnNudge").classList.remove("show");
+  document.getElementById("btnPlayAgain").classList.add("show");
+  document.getElementById("btnRoll").disabled = true;
+
+  const winners = allPlayers.filter((_, i) => i % 2 === teamIdx).map(p => p.username);
+  sendToParent({ type: "game_over", gameName: thisGameName, result: iAmWinner ? "win" : "loss", isDraw: false, winners: winners });
+  drawBoard();
+  updatePlayerHeader();
+}
+
+function showSixPenalty() {
+  const toast = document.getElementById("sixPenaltyToast");
+  toast.style.display = "";
+  toast.style.transform = "translate(-50%, -50%) scale(1)";
+}
+
+function hideSixPenalty() {
+  const toast = document.getElementById("sixPenaltyToast");
+  toast.style.display = "none";
+  toast.style.transform = "translate(-50%, -50%) scale(0)";
+}
+
+// ============================================================
+// 消息处理
+// ============================================================
+function onParentMessage(event) {
+  const msg = event.data;
+  if (!msg || !msg.type) return;
+
+  switch (msg.type) {
+    case "room_update": handleRoomUpdate(msg); break;
+    case "game_start": handleGameStart(msg); break;
+    case "game_action": handleGameAction(msg); break;
+    case "ready_update": handleReadyUpdate(msg); break;
+  }
+}
+
+function handleRoomUpdate(msg) {
+  const players = msg.players || [];
+  updatePrePlayerList(players);
+
+  if (players.length > 0) {
+    showWaiting("等待玩家加入... (" + players.length + "/" + (playerCount || "?") + ")");
+  }
+}
+
+function handleReadyUpdate(msg) {
+  const players = msg.players || [];
+  // 更新玩家准备状态
+  for (const rp of players) {
+    const ap = allPlayers.find(p => p.username === rp.username);
+    if (ap) ap.ready = rp.ready;
+  }
+  updatePrePlayerList(allPlayers);
+
+  const readyCount = players.filter(p => p.ready).length;
+  document.getElementById("preGameStatus").textContent =
+    "等待所有玩家准备...（" + readyCount + "/" + players.length + "）";
+}
+
+function handleGameStart(msg) {
+  gameStarted = true;
+  gameOver = false;
+  allPlayers = msg.players || [];
+  playerCount = allPlayers.length;
+
+  // 分配玩家索引
+  for (let i = 0; i < allPlayers.length; i++) {
+    allPlayers[i].playerIndex = i;
+    if (allPlayers[i].username === myInfo.username) {
+      myPlayerIndex = i;
+    }
+  }
+
+  // 初始化 playerControls
+  playerControls = [];
+  if (ruleFlags.dualColors && playerCount === 2) {
+    playerControls[0] = [0, 2]; // 红+绿
+    playerControls[1] = [1, 3]; // 蓝+黄
+  } else {
+    for (let i = 0; i < playerCount; i++) {
+      playerControls[i] = [i];
+    }
+  }
+
+  // 收集活跃颜色
+  const activeColors = new Set();
+  for (const colors of playerControls) {
+    for (const ci of colors) activeColors.add(ci);
+  }
+
+  // 初始化棋子（仅活跃颜色）
+  pieces = [[], [], [], []];
+  for (const ci of activeColors) {
+    for (let j = 0; j < 4; j++) {
+      pieces[ci][j] = { state: "base", pos: -1 };
+    }
+  }
+
+  // 回合顺序
+  const firstUsername = msg.firstTurn;
+  const firstIdx = allPlayers.findIndex(p => p.username === firstUsername);
+  turnOrder = [];
+  for (let i = 0; i < playerCount; i++) {
+    turnOrder.push((firstIdx + i) % playerCount);
+  }
+  currentPlayerIndex = turnOrder[0];
+  myTurn = (currentPlayerIndex === myPlayerIndex);
+
+  // 隐藏赛前界面，显示对局界面
+  document.getElementById("preGamePanel").style.display = "none";
+  document.getElementById("gamePanel").style.display = "";
+  hideWaiting();
+
+  buildPlayerHeader();
+  updatePlayerHeader();
+  drawBoard();
+
+  // 初始化按钮
+  document.getElementById("btnSurrender").classList.add("show");
+  document.getElementById("btnNudge").classList.remove("show");
+  document.getElementById("btnPlayAgain").classList.remove("show");
+  document.getElementById("btnRoll").disabled = !myTurn;
+  document.getElementById("btnFly").style.display = "none";
+
+  turnPhase = "roll";
+  diceValue = 1;
+  consecutiveSixes = 0;
+  lastMovedPiece = null;
+  validMoves = [];
+  selectedPieceIndex = -1;
+  drawDie(1);
+
+  updateTurnUI();
+  if (myTurn) startMoveTimer();
+
+  document.getElementById("statusText").textContent = myTurn ? "请掷骰子" : "等待对手行动...";
+}
+
+function handleGameAction(msg) {
+  if (!gameStarted) {
+    // 赛前阶段的 rule_change
+    if (msg.action === "rule_change") {
+      ruleFlags[msg.data.field] = msg.data.value;
+      updateRuleIndicators();
+      updatePrePlayerList(allPlayers);
+    }
+    return;
+  }
+
+  const from = msg.from;
+  const fromIdx = allPlayers.findIndex(p => p.username === from);
+  if (fromIdx < 0) return;
+
+  if (gameOver && (msg.action === "dice_roll" || msg.action === "piece_move" || msg.action === "piece_fly")) {
+    return;
+  }
+
+  switch (msg.action) {
+    case "dice_roll":
+      if (fromIdx !== myPlayerIndex) {
+        applyDiceRoll(msg.data.value);
+      }
+      break;
+
+    case "piece_move": {
+      const data = msg.data;
+      executeMove(data.colorIndex, data.pieceIndex, {
+        toState: data.toState,
+        toPos: data.toPos,
+      });
+
+      if (ruleFlags.teamMode && playerCount === 4) {
+        const teamIdx = data.colorIndex % 2;
+        if (checkTeamWin(teamIdx)) {
+          handleTeamWin(teamIdx);
+          return;
+        }
+      } else if (checkWinForPlayer(fromIdx)) {
+        gameOver = true;
+        stopMoveTimer();
+        myTurn = false;
+        document.getElementById("statusText").textContent =
+          (fromIdx === myPlayerIndex || isFriendly(fromIdx, myPlayerIndex)) ? "你赢了！" : "对手赢了！";
+        document.getElementById("btnSurrender").classList.remove("show");
+        document.getElementById("btnNudge").classList.remove("show");
+        document.getElementById("btnPlayAgain").classList.add("show");
+        document.getElementById("btnRoll").disabled = true;
+        drawBoard();
+        updatePlayerHeader();
+        return;
+      }
+
+      if (fromIdx !== myPlayerIndex) {
+        advanceTurn();
+      }
+      drawBoard();
+      updatePlayerHeader();
+      break;
+    }
+
+    case "piece_fly": {
+      const data = msg.data;
+      const p = pieces[data.colorIndex][data.pieceIndex];
+      p.state = "track";
+      p.pos = data.toPos;
+      const myStackSize = countPiecesAt(data.colorIndex, "track", data.toPos);
+      checkCapture(data.colorIndex, data.toPos, myStackSize);
+      if (fromIdx !== myPlayerIndex) {
+        advanceTurn();
+      }
+      drawBoard();
+      updatePlayerHeader();
+      break;
+    }
+
+    case "surrender":
+      gameOver = true;
+      stopMoveTimer();
+      myTurn = false;
+      document.getElementById("statusText").textContent = from + " 认输！";
+      document.getElementById("btnSurrender").classList.remove("show");
+      document.getElementById("btnNudge").classList.remove("show");
+      document.getElementById("btnPlayAgain").classList.add("show");
+      document.getElementById("btnRoll").disabled = true;
+      drawBoard();
+      updatePlayerHeader();
+      break;
+
+    case "nudge":
+      showNudgeToast(from);
+      break;
+
+    case "timeout":
+      gameOver = true;
+      stopMoveTimer();
+      myTurn = false;
+      document.getElementById("statusText").textContent = from + " 超时！";
+      document.getElementById("btnSurrender").classList.remove("show");
+      document.getElementById("btnNudge").classList.remove("show");
+      document.getElementById("btnPlayAgain").classList.add("show");
+      document.getElementById("btnRoll").disabled = true;
+      drawBoard();
+      updatePlayerHeader();
+      break;
+
+    case "player_left":
+      document.getElementById("statusText").textContent = from + " 离开了游戏";
+      break;
+
+    case "rule_change":
+      ruleFlags[msg.data.field] = msg.data.value;
+      updateRuleIndicators();
+      break;
+  }
+}
+
+// ============================================================
+// 计时器
+// ============================================================
+function startMoveTimer() {
+  moveTimeLeft = 60;
+  updateTimerDisplay();
+  const timerEl = document.getElementById("moveTimer");
+  timerEl.classList.remove("urgent");
+  stopMoveTimer();
+  moveTimerInterval = setInterval(() => {
+    moveTimeLeft--;
+    updateTimerDisplay();
+    if (moveTimeLeft <= 10) {
+      document.getElementById("moveTimer").classList.add("urgent");
+    }
+    if (moveTimeLeft <= 0) {
+      timeoutLoss();
+    }
+  }, 1000);
+}
+
+function stopMoveTimer() {
+  if (moveTimerInterval) {
+    clearInterval(moveTimerInterval);
+    moveTimerInterval = null;
+  }
+}
+
+function updateTimerDisplay() {
+  document.getElementById("moveTimer").textContent = moveTimeLeft + "s";
+}
+
+function timeoutLoss() {
+  stopMoveTimer();
+  if (!myTurn) return;
+  gameOver = true;
+  myTurn = false;
+  sendToParent({ type: "game_action", action: "timeout", data: {} });
+  sendToParent({ type: "game_over", gameName: thisGameName, result: "loss", isDraw: false });
+  document.getElementById("statusText").textContent = "你超时了！";
+  document.getElementById("btnSurrender").classList.remove("show");
+  document.getElementById("btnNudge").classList.remove("show");
+  document.getElementById("btnPlayAgain").classList.add("show");
+  document.getElementById("btnRoll").disabled = true;
+  drawBoard();
+}
+
+// ============================================================
+// 其他操作
+// ============================================================
+function surrender() {
+  if (!gameStarted || gameOver) return;
+  stopMoveTimer();
+  gameOver = true;
+  myTurn = false;
+  sendToParent({ type: "game_action", action: "surrender", data: {} });
+
+  if (ruleFlags.teamMode && playerCount === 4) {
+    const oppTeam = (myPlayerIndex % 2 === 0) ? 1 : 0;
+    const winners = [];
+    for (let pi = 0; pi < playerCount; pi++) {
+      if (pi % 2 === oppTeam) winners.push(allPlayers[pi].username);
+    }
+    sendToParent({ type: "game_over", gameName: thisGameName, result: "loss", isDraw: false, winners: winners });
+  } else {
+    sendToParent({ type: "game_over", gameName: thisGameName, result: "loss", isDraw: false });
+  }
+
+  document.getElementById("statusText").textContent = "你认输了";
+  document.getElementById("btnSurrender").classList.remove("show");
+  document.getElementById("btnNudge").classList.remove("show");
+  document.getElementById("btnPlayAgain").classList.add("show");
+  document.getElementById("btnRoll").disabled = true;
+  drawBoard();
+}
+
+function nudgePlayer() {
+  if (myTurn || gameOver || nudgeSent) return;
+  nudgeSent = true;
+  sendToParent({ type: "game_action", action: "nudge", data: {} });
+  document.getElementById("btnNudge").classList.remove("show");
+  document.getElementById("statusText").textContent = "已发送提醒";
+  setTimeout(() => {
+    if (!gameOver && !myTurn) {
+      const cp = allPlayers[currentPlayerIndex];
+      document.getElementById("statusText").textContent = "等待 " + (cp ? cp.username : "?") + " 行动...";
+    }
+  }, 2000);
+}
+
+function showNudgeToast(from) {
+  const wrapper = document.getElementById("boardWrapper");
+  if (!wrapper) return;
+  let toast = document.getElementById("nudgeToast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "nudgeToast";
+    toast.className = "nudge-toast";
+    toast.textContent = from + " 提醒你落子！";
+    wrapper.appendChild(toast);
+  }
+  toast.classList.add("show");
+  if (nudgeToastTimeout) clearTimeout(nudgeToastTimeout);
+  nudgeToastTimeout = setTimeout(() => { toast.classList.remove("show"); }, 2000);
+}
+
+function playAgain() {
+  stopMoveTimer();
+  gameStarted = false;
+  gameOver = false;
+  myTurn = false;
+  sendToParent({ type: "play_again" });
+
+  document.getElementById("gamePanel").style.display = "none";
+  document.getElementById("preGamePanel").style.display = "";
+  document.getElementById("btnPlayAgain").classList.remove("show");
+  document.getElementById("btnSurrender").classList.remove("show");
+  document.getElementById("btnNudge").classList.remove("show");
+
+  myReady = false;
+  document.getElementById("btnReady").textContent = "准备";
+  document.getElementById("btnReady").classList.remove("is-ready");
+  document.getElementById("preGameStatus").textContent = "等待所有玩家准备...";
+}
+
+function toggleRulesPopup() {
+  const popup = document.getElementById("rulesPopup");
+  if (popup.style.display === "none") {
+    // 填充当前规则
+    const list = document.getElementById("rulesPopupList");
+    list.innerHTML = "";
+    const rules = [
+      { field: "flyOnFive", label: "五点可飞" },
+      { field: "overstepHome", label: "允许超步直达" },
+      { field: "singleStackBothBack", label: "单撞叠一起回" },
+      { field: "homeStacking", label: "主场可叠子" },
+      { field: "dualColors", label: "双人双色" },
+      { field: "teamMode", label: "组队模式" },
+    ];
+    for (const r of rules) {
+      const div = document.createElement("div");
+      div.className = "rule-item";
+      div.innerHTML = '<span class="rule-label">' + r.label + '</span>' +
+        '<span class="rule-indicator ' + (ruleFlags[r.field] ? 'on' : 'off') + '">' +
+        (ruleFlags[r.field] ? '✓' : '✗') + '</span>';
+      list.appendChild(div);
+    }
+    popup.style.display = "";
+  } else {
+    popup.style.display = "none";
+  }
+}
+
+// ============================================================
+// 入口
+// ============================================================
+init();

@@ -56,7 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         pendingGameMessages = [];
       }
-    } else if (msg.type === "game_action" || msg.type === "play_again" || msg.type === "game_over") {
+    } else if (msg.type === "game_action" || msg.type === "play_again" || msg.type === "game_over" || msg.type === "set_ready") {
       // 将游戏 iframe 的操作转发到服务器
       sendMessage(msg);
     }
@@ -175,21 +175,65 @@ function handleMessage(msg) {
       break;
 
     case "room_created":
-      // 进入游戏界面（作为房主等待）
-      enterGame(msg.roomId, msg.gameName);
+      window._customReadyGame = !!msg.customReady;
+      if (msg.customReady) {
+        enterGame(msg.roomId, msg.gameName);
+      } else {
+        enterRoomPanel(msg.roomId, msg.gameName);
+      }
       break;
 
     case "room_joined":
-      // 加入成功后进入游戏界面
-      enterGame(msg.roomId, msg.gameName);
+      window._customReadyGame = !!msg.customReady;
+      if (msg.customReady) {
+        enterGame(msg.roomId, msg.gameName);
+      } else {
+        enterRoomPanel(msg.roomId, msg.gameName);
+        if (msg.players) {
+          updateRoomPanel(msg.players);
+        }
+      }
+      break;
+
+    case "ready_update":
+      if (window._gameActive) {
+        // customReady 游戏：转发给 iframe 让它知道其他玩家准备状态
+        if (window._customReadyGame) {
+          notifyGameIframe(msg);
+          return;
+        }
+        // 普通游戏再来一局：清除游戏 iframe，回到房间面板
+        const iframe = document.getElementById("gameIframe");
+        iframe.src = "";
+        iframe.style.display = "none";
+        pendingGameMessages = [];
+        window._iframeReady = false;
+        window._gameActive = false;
+        window._myReady = false;
+      }
+      // 确保房间面板可见
+      document.getElementById("gameContainer").style.display = "flex";
+      showRoomPanel();
+      updateRoomPanel(msg.players);
       break;
 
     case "room_update":
-      // 房间状态更新（由游戏 iframe 处理或更新等待界面）
+      // 如果房间面板正在显示，更新面板
+      if (document.getElementById("roomPanel") && document.getElementById("roomPanel").style.display !== "none") {
+        updateRoomPanel(msg.players);
+        return;
+      }
+      // 否则转发给游戏 iframe
       notifyGameIframe(msg);
       break;
 
     case "game_start":
+      // 如果房间面板还在显示，先隐藏面板并加载游戏
+      if (document.getElementById("roomPanel") && document.getElementById("roomPanel").style.display !== "none") {
+        hideRoomPanel();
+        enterGame(msg.roomId, window._currentRoomGame);
+      }
+      window._gameActive = true;
       // 游戏开始，通知 iframe
       notifyGameIframe(msg);
       break;
@@ -600,6 +644,7 @@ function enterGame(roomId, gameName) {
   document.getElementById("gameContainer").style.display = "flex";
 
   const iframe = document.getElementById("gameIframe");
+  iframe.style.display = "block";
   // 通过 URL 参数传递房间 ID 和用户信息，让游戏页面拿到上下文
   const gameUrl = "/box/" + encodeURIComponent(gameName) + "/game.html" +
     "?roomId=" + encodeURIComponent(roomId) +
@@ -613,11 +658,122 @@ function enterGame(roomId, gameName) {
 }
 
 // ============================================================
-// 离开游戏
+// 房间准备面板
+// ============================================================
+function enterRoomPanel(roomId, gameName) {
+  window._currentRoomGame = gameName;
+  window._currentRoomId = roomId;
+  window._gameActive = false;
+
+  document.getElementById("mainContent").style.display = "none";
+  document.getElementById("gameContainer").style.display = "flex";
+  document.getElementById("gameIframe").style.display = "none";
+
+  const panel = document.getElementById("roomPanel");
+  panel.style.display = "flex";
+  document.getElementById("roomPanelTitle").textContent = "房间 - " + getGameDisplayName(gameName);
+  document.getElementById("roomStatusText").textContent = "等待所有玩家准备...";
+  document.getElementById("btnReady").textContent = "准备";
+  document.getElementById("btnReady").classList.remove("is-ready");
+  window._myReady = false;
+
+  // 初始化玩家列表（包含自己）
+  const initialPlayers = [{
+    username: currentUser,
+    avatarText: currentProfile.avatarText,
+    textColor: currentProfile.textColor,
+    borderColor: currentProfile.borderColor,
+    ready: false,
+  }];
+  updateRoomPanel(initialPlayers);
+}
+
+function showRoomPanel() {
+  const panel = document.getElementById("roomPanel");
+  if (panel) {
+    panel.style.display = "flex";
+    document.getElementById("gameIframe").style.display = "none";
+    document.getElementById("btnReady").textContent = "准备";
+    document.getElementById("btnReady").classList.remove("is-ready");
+    window._myReady = false;
+  }
+}
+
+function hideRoomPanel() {
+  const panel = document.getElementById("roomPanel");
+  if (panel) {
+    panel.style.display = "none";
+  }
+}
+
+function updateRoomPanel(players) {
+  const listEl = document.getElementById("roomPlayerList");
+  if (!listEl) return;
+
+  listEl.innerHTML = "";
+
+  let readyCount = 0;
+  for (const p of players) {
+    const item = document.createElement("div");
+    item.className = "room-player-item";
+
+    const avatar = document.createElement("div");
+    avatar.className = "room-player-avatar";
+    avatar.style.borderColor = p.borderColor || "#ccc";
+    avatar.style.color = p.textColor || "#999";
+    avatar.textContent = p.avatarText || p.username.slice(0, 6);
+
+    const name = document.createElement("div");
+    name.className = "room-player-name";
+    name.textContent = p.username;
+
+    const ready = document.createElement("div");
+    ready.className = "room-player-ready " + (p.ready ? "ready" : "waiting");
+    ready.textContent = p.ready ? "✓ 已准备" : "⏳ 等待中";
+
+    item.appendChild(avatar);
+    item.appendChild(name);
+    item.appendChild(ready);
+    listEl.appendChild(item);
+
+    if (p.ready) readyCount++;
+  }
+
+  document.getElementById("roomStatusText").textContent =
+    "等待所有玩家准备...（" + readyCount + "/" + players.length + "）";
+}
+
+function toggleReady() {
+  window._myReady = !window._myReady;
+  const btn = document.getElementById("btnReady");
+  if (window._myReady) {
+    btn.textContent = "取消准备";
+    btn.classList.add("is-ready");
+  } else {
+    btn.textContent = "准备";
+    btn.classList.remove("is-ready");
+  }
+  sendMessage({ type: "set_ready", ready: window._myReady });
+}
+
+function getGameDisplayName(gameId) {
+  // 从已加载的游戏列表中查找显示名称
+  if (games && games.length) {
+    const found = games.find(g => g.id === gameId);
+    if (found) return found.name;
+  }
+  return gameId;
+}
+
+// ============================================================
+// 离开游戏 / 离开房间
 // ============================================================
 function leaveGame() {
   sendMessage({ type: "leave_room" });
-  // exitGameUI 会在收到 room_left 后调用
+}
+
+function leaveRoom() {
+  sendMessage({ type: "leave_room" });
 }
 
 // 退出游戏 UI（由 room_left 消息触发）
@@ -626,8 +782,17 @@ function exitGameUI() {
   document.getElementById("mainContent").style.display = "block";
   const iframe = document.getElementById("gameIframe");
   iframe.src = "";
+  iframe.style.display = "none";
   pendingGameMessages = [];
   window._iframeReady = false;
+  window._gameActive = false;
+  window._customReadyGame = false;
+  window._currentRoomGame = null;
+  window._currentRoomId = null;
+  window._myReady = false;
+  // 隐藏房间面板
+  const panel = document.getElementById("roomPanel");
+  if (panel) panel.style.display = "none";
 }
 
 // ============================================================
