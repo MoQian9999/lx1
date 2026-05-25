@@ -151,19 +151,29 @@ function initBoard() {
 }
 
 // ============================================================
+// 显示坐标变换：让己方棋子始终在下方
+// ============================================================
+function toDisplay(r, c) {
+  if (myColor === "black") return { row: 9 - r, col: 8 - c };
+  return { row: r, col: c };
+}
+function toInternal(dr, dc) { return toDisplay(dr, dc); }
+
+// ============================================================
 // 坐标转换：棋盘交叉点 <-> 画布像素
 // ============================================================
 function intersectionToPixel(row, col) {
+  const d = toDisplay(row, col);
   return {
-    x: PADDING + col * CELL_SIZE,
-    y: PADDING + row * CELL_SIZE,
+    x: PADDING + d.col * CELL_SIZE,
+    y: PADDING + d.row * CELL_SIZE,
   };
 }
 
 function pixelToIntersection(mx, my) {
-  const col = Math.round((mx - PADDING) / CELL_SIZE);
-  const row = Math.round((my - PADDING) / CELL_SIZE);
-  return { row, col };
+  const dc = Math.round((mx - PADDING) / CELL_SIZE);
+  const dr = Math.round((my - PADDING) / CELL_SIZE);
+  return toInternal(dr, dc);
 }
 
 // ============================================================
