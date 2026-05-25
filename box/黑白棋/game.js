@@ -5,10 +5,13 @@
 
 // ---------- 常量 ----------
 const BOARD_SIZE = 8;
-const CELL_SIZE = 52;         // 每格像素
-const PADDING = 16;           // 棋盘边距
-const STONE_RADIUS = 22;      // 棋子半径
-const HINT_RADIUS = 8;        // 合法位置提示圆点半径
+const MAX_CELL_SIZE = 52;
+const MIN_CELL_SIZE = 30;
+// 动态尺寸（根据视口自动调整）
+let cellSize = MAX_CELL_SIZE;
+let padding = 16;
+let stoneRadius = 22;
+let hintRadius = 8;
 
 // 8 个方向
 const DIRS = [
@@ -43,6 +46,12 @@ let animStartTime = 0;
 let animCallback = null;
 const ANIM_DURATION = 350;    // 动画总时长 ms
 
+// ---------- 缩放/平移状态 ----------
+let zoomLevel = 1, panX = 0, panY = 0;
+const ZOOM_MIN = 0.5, ZOOM_MAX = 3.0, ZOOM_STEP = 0.25;
+let _touches = {}, _pinchStartDist = 0, _pinchStartZoom = 1, _pinchCenter = null;
+let _dragging = false, _dragStart = null, _dragMoved = false;
+
 // ============================================================
 // 初始化
 // ============================================================
@@ -61,17 +70,117 @@ function init() {
   };
 
   resetBoard();
-  const canvasSize = BOARD_SIZE * CELL_SIZE + PADDING * 2;
-  canvas.width = canvasSize;
-  canvas.height = canvasSize;
-  drawBoard();
+  fitCanvasToViewport();
 
   canvas.addEventListener("click", onCanvasClick);
+  canvas.addEventListener("wheel", onWheel, { passive: false });
+  canvas.addEventListener("touchstart", onTouchStart, { passive: false });
+  canvas.addEventListener("touchmove", onTouchMove, { passive: false });
+  canvas.addEventListener("touchend", onTouchEnd);
+  canvas.addEventListener("mousedown", onMouseDown);
+  window.addEventListener("mousemove", onMouseMove);
+  window.addEventListener("mouseup", onMouseUp);
+  document.getElementById("btnZoomIn").addEventListener("click", zoomIn);
+  document.getElementById("btnZoomOut").addEventListener("click", zoomOut);
+  document.getElementById("btnZoomReset").addEventListener("click", zoomReset);
   window.addEventListener("message", onParentMessage);
+  window.addEventListener("resize", onWindowResize);
   sendToParent({ type: "game_ready" });
   showWaiting("等待对手加入...");
   document.getElementById("statusText").textContent = "玩家：" + myInfo.username;
 }
+
+function fitCanvasToViewport() {
+  const maxWidth = Math.min(window.innerWidth - 24, 500);
+  const maxHeight = Math.min(window.innerHeight - 200, 700);
+  const cellByW = Math.floor((maxWidth - 32) / BOARD_SIZE);
+  const cellByH = Math.floor((maxHeight - 32) / BOARD_SIZE);
+  cellSize = Math.min(MAX_CELL_SIZE, cellByW, cellByH);
+  cellSize = Math.max(MIN_CELL_SIZE, cellSize);
+  padding = Math.max(10, Math.floor(cellSize * 0.31));
+  stoneRadius = Math.floor(cellSize * 0.42);
+  hintRadius = Math.max(4, Math.floor(cellSize * 0.15));
+  const canvasSize = BOARD_SIZE * cellSize + padding * 2;
+  canvas.width = canvasSize;
+  canvas.height = canvasSize;
+  drawBoard();
+}
+
+let _resizeTimeout = null;
+function onWindowResize() {
+  clearTimeout(_resizeTimeout);
+  _resizeTimeout = setTimeout(() => {
+    fitCanvasToViewport();
+    renderPlayerInfo();
+  }, 200);
+}
+
+// ---------- 缩放/平移 ----------
+function canvasToBoard(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return { x: ((clientX - rect.left) * scaleX - panX) / zoomLevel, y: ((clientY - rect.top) * scaleY - panY) / zoomLevel };
+}
+function zoomIn() { applyZoom(zoomLevel + ZOOM_STEP); }
+function zoomOut() { applyZoom(zoomLevel - ZOOM_STEP); }
+function zoomReset() { zoomLevel = 1; panX = 0; panY = 0; drawBoard(); }
+function applyZoom(z) {
+  zoomLevel = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+  const maxPan = Math.max(0, (canvas.width * zoomLevel - canvas.width) / 2);
+  panX = Math.max(-maxPan, Math.min(maxPan, panX));
+  panY = Math.max(-maxPan, Math.min(maxPan, panY));
+  drawBoard();
+}
+function onWheel(e) {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+  const oldZoom = zoomLevel;
+  applyZoom(e.deltaY < 0 ? zoomLevel + ZOOM_STEP : zoomLevel - ZOOM_STEP);
+  panX = mx - (mx - panX) * (zoomLevel / oldZoom);
+  panY = my - (my - panY) * (zoomLevel / oldZoom);
+  drawBoard();
+}
+function onMouseDown(e) { if (e.button === 0) { _dragging = true; _dragMoved = false; _dragStart = { x: e.clientX, y: e.clientY, px: panX, py: panY }; } }
+function onMouseMove(e) {
+  if (!_dragging || !_dragStart) return;
+  if (Math.abs(e.clientX - _dragStart.x) > 2 || Math.abs(e.clientY - _dragStart.y) > 2) _dragMoved = true;
+  panX = _dragStart.px + (e.clientX - _dragStart.x) * (canvas.width / canvas.getBoundingClientRect().width);
+  panY = _dragStart.py + (e.clientY - _dragStart.y) * (canvas.height / canvas.getBoundingClientRect().height);
+  drawBoard();
+}
+function onMouseUp() { _dragging = false; }
+function onTouchStart(e) {
+  e.preventDefault();
+  for (const t of e.changedTouches) _touches[t.identifier] = { x: t.clientX, y: t.clientY };
+  if (e.touches.length === 2) {
+    _pinchStartDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    _pinchStartZoom = zoomLevel;
+    _pinchCenter = { x: (e.touches[0].clientX + e.touches[1].clientX) / 2, y: (e.touches[0].clientY + e.touches[1].clientY) / 2 };
+  }
+}
+function onTouchMove(e) {
+  e.preventDefault();
+  if (e.touches.length === 2 && _pinchStartDist > 0) {
+    const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    const newZoom = _pinchStartZoom * (dist / _pinchStartDist);
+    const rect = canvas.getBoundingClientRect();
+    const cx = (_pinchCenter.x - rect.left) * (canvas.width / rect.width);
+    const cy = (_pinchCenter.y - rect.top) * (canvas.height / rect.height);
+    const oldZoom = zoomLevel;
+    applyZoom(newZoom);
+    panX = cx - (cx - panX) * (zoomLevel / oldZoom);
+    panY = cy - (cy - panY) * (zoomLevel / oldZoom);
+    drawBoard();
+  } else if (e.touches.length === 1 && zoomLevel > 1) {
+    const t = e.touches[0], prev = _touches[t.identifier];
+    if (prev) { panX += (t.clientX - prev.x) * (canvas.width / canvas.getBoundingClientRect().width); panY += (t.clientY - prev.y) * (canvas.height / canvas.getBoundingClientRect().height); drawBoard(); }
+    for (const t2 of e.touches) _touches[t2.identifier] = { x: t2.clientX, y: t2.clientY };
+  }
+}
+function onTouchEnd(e) { for (const t of e.changedTouches) delete _touches[t.identifier]; }
 
 function resetBoard() {
   board = [];
@@ -104,6 +213,8 @@ function resetBoard() {
 function drawBoard(skipAnimating) {
   const w = canvas.width;
   const h = canvas.height;
+  ctx.save();
+  ctx.setTransform(zoomLevel, 0, 0, zoomLevel, panX, panY);
 
   // 背景
   ctx.fillStyle = "#2d7d3f";
@@ -113,21 +224,21 @@ function drawBoard(skipAnimating) {
   ctx.strokeStyle = "#1a5c2a";
   ctx.lineWidth = 1;
   for (let i = 0; i <= BOARD_SIZE; i++) {
-    const pos = PADDING + i * CELL_SIZE;
+    const pos = padding + i * cellSize;
     ctx.beginPath();
-    ctx.moveTo(PADDING, pos);
-    ctx.lineTo(PADDING + BOARD_SIZE * CELL_SIZE, pos);
+    ctx.moveTo(padding, pos);
+    ctx.lineTo(padding + BOARD_SIZE * cellSize, pos);
     ctx.stroke();
     ctx.beginPath();
-    ctx.moveTo(pos, PADDING);
-    ctx.lineTo(pos, PADDING + BOARD_SIZE * CELL_SIZE);
+    ctx.moveTo(pos, padding);
+    ctx.lineTo(pos, padding + BOARD_SIZE * cellSize);
     ctx.stroke();
   }
 
   // 边框
   ctx.strokeStyle = "#1a4a24";
   ctx.lineWidth = 3;
-  ctx.strokeRect(PADDING, PADDING, BOARD_SIZE * CELL_SIZE, BOARD_SIZE * CELL_SIZE);
+  ctx.strokeRect(padding, padding, BOARD_SIZE * cellSize, BOARD_SIZE * cellSize);
 
   // 动画中跳过正在变化的棋子位置
   const skipSet = skipAnimating ? buildAnimSkipSet() : new Set();
@@ -148,6 +259,14 @@ function drawBoard(skipAnimating) {
   }
   // 分数
   updateScore();
+
+  ctx.restore();
+  if (zoomLevel !== 1) {
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(Math.round(zoomLevel * 100) + "%", 8, canvas.height - 8);
+  }
 }
 
 function buildAnimSkipSet() {
@@ -159,23 +278,23 @@ function buildAnimSkipSet() {
 
 function drawStone(row, col, color, scaleX) {
   if (scaleX === undefined) scaleX = 1;
-  const cx = PADDING + col * CELL_SIZE + CELL_SIZE / 2;
-  const cy = PADDING + row * CELL_SIZE + CELL_SIZE / 2;
+  const cx = padding + col * cellSize + cellSize / 2;
+  const cy = padding + row * cellSize + cellSize / 2;
 
   ctx.save();
   ctx.translate(cx, cy);
   ctx.scale(scaleX, 1);
 
   ctx.beginPath();
-  ctx.arc(0, 0, STONE_RADIUS, 0, Math.PI * 2);
+  ctx.arc(0, 0, stoneRadius, 0, Math.PI * 2);
 
   if (color === "black") {
-    const g = ctx.createRadialGradient(-5, -5, 2, 0, 0, STONE_RADIUS);
+    const g = ctx.createRadialGradient(-5, -5, 2, 0, 0, stoneRadius);
     g.addColorStop(0, "#555");
     g.addColorStop(1, "#111");
     ctx.fillStyle = g;
   } else {
-    const g = ctx.createRadialGradient(-5, -5, 2, 0, 0, STONE_RADIUS);
+    const g = ctx.createRadialGradient(-5, -5, 2, 0, 0, stoneRadius);
     g.addColorStop(0, "#fff");
     g.addColorStop(1, "#ccc");
     ctx.fillStyle = g;
@@ -191,10 +310,10 @@ function drawStone(row, col, color, scaleX) {
 function drawHints() {
   if (!myTurn || gameOver) return;
   for (const { row, col } of validMoves) {
-    const x = PADDING + col * CELL_SIZE + CELL_SIZE / 2;
-    const y = PADDING + row * CELL_SIZE + CELL_SIZE / 2;
+    const x = padding + col * cellSize + cellSize / 2;
+    const y = padding + row * cellSize + cellSize / 2;
     ctx.beginPath();
-    ctx.arc(x, y, HINT_RADIUS, 0, Math.PI * 2);
+    ctx.arc(x, y, hintRadius, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
     ctx.fill();
   }
@@ -374,15 +493,11 @@ function getWinner() {
 // ============================================================
 function onCanvasClick(e) {
   if (!gameStarted || gameOver || !myTurn || isAnimating) return;
+  if (_dragMoved) { _dragMoved = false; return; }
 
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
-  const mx = (e.clientX - rect.left) * scaleX;
-  const my = (e.clientY - rect.top) * scaleY;
-
-  const col = Math.floor((mx - PADDING) / CELL_SIZE);
-  const row = Math.floor((my - PADDING) / CELL_SIZE);
+  const pt = canvasToBoard(e.clientX, e.clientY);
+  const col = Math.floor((pt.x - padding) / cellSize);
+  const row = Math.floor((pt.y - padding) / cellSize);
 
   if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) return;
   if (board[row][col] !== null) return;

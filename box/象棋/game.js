@@ -6,10 +6,13 @@
 // ---------- 常量 ----------
 const COLS = 9;
 const ROWS = 10;
-const CELL_SIZE = 60;
-const PADDING = 30;
-const PIECE_RADIUS = 25;
-const HINT_RADIUS = 8;
+const MAX_CELL_SIZE = 60;
+const MIN_CELL_SIZE = 28;
+// 动态尺寸（根据视口自动调整）
+let cellSize = MAX_CELL_SIZE;
+let padding = 30;
+let pieceRadius = 25;
+let hintRadius = 8;
 
 const PIECE_CHARS = {
   red: {
@@ -63,6 +66,12 @@ let prevCaptured = null;
 let pendingUndoRequest = false;
 let pendingUndoTwoStones = false;
 
+// ---------- 缩放/平移状态 ----------
+let zoomLevel = 1, panX = 0, panY = 0;
+const ZOOM_MIN = 0.5, ZOOM_MAX = 3.0, ZOOM_STEP = 0.25;
+let _touches = {}, _pinchStartDist = 0, _pinchStartZoom = 1, _pinchCenter = null;
+let _dragging = false, _dragStart = null, _dragMoved = false;
+
 // ============================================================
 // 初始化
 // ============================================================
@@ -81,18 +90,115 @@ function init() {
   };
 
   resetBoard();
-  const canvasWidth = (COLS - 1) * CELL_SIZE + PADDING * 2;
-  const canvasHeight = (ROWS - 1) * CELL_SIZE + PADDING * 2;
-  canvas.width = canvasWidth;
-  canvas.height = canvasHeight;
-  drawBoard();
+  fitCanvasToViewport();
 
   canvas.addEventListener("click", onCanvasClick);
+  canvas.addEventListener("wheel", onWheel, { passive: false });
+  canvas.addEventListener("touchstart", onTouchStart, { passive: false });
+  canvas.addEventListener("touchmove", onTouchMove, { passive: false });
+  canvas.addEventListener("touchend", onTouchEnd);
+  canvas.addEventListener("mousedown", onMouseDown);
+  window.addEventListener("mousemove", onMouseMove);
+  window.addEventListener("mouseup", onMouseUp);
+  document.getElementById("btnZoomIn").addEventListener("click", zoomIn);
+  document.getElementById("btnZoomOut").addEventListener("click", zoomOut);
+  document.getElementById("btnZoomReset").addEventListener("click", zoomReset);
   window.addEventListener("message", onParentMessage);
+  window.addEventListener("resize", onWindowResize);
   sendToParent({ type: "game_ready" });
   showWaiting("等待对手加入...");
   document.getElementById("statusText").textContent = "玩家：" + myInfo.username;
 }
+
+function fitCanvasToViewport() {
+  const maxWidth = Math.min(window.innerWidth - 24, 600);
+  const maxHeight = Math.min(window.innerHeight - 200, 800);
+  const cellByW = Math.floor((maxWidth - 60) / (COLS - 1));
+  const cellByH = Math.floor((maxHeight - 60) / (ROWS - 1));
+  cellSize = Math.min(MAX_CELL_SIZE, cellByW, cellByH);
+  cellSize = Math.max(MIN_CELL_SIZE, cellSize);
+  padding = Math.max(16, Math.floor(cellSize * 0.5));
+  pieceRadius = Math.floor(cellSize * 0.42);
+  hintRadius = Math.max(4, Math.floor(cellSize * 0.13));
+  canvas.width = (COLS - 1) * cellSize + padding * 2;
+  canvas.height = (ROWS - 1) * cellSize + padding * 2;
+  drawBoard();
+}
+
+let _resizeTimeout = null;
+function onWindowResize() {
+  clearTimeout(_resizeTimeout);
+  _resizeTimeout = setTimeout(() => {
+    fitCanvasToViewport();
+    renderPlayerInfo();
+  }, 200);
+}
+
+// ---------- 缩放/平移 ----------
+function canvasToBoard(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const sX = canvas.width / rect.width, sY = canvas.height / rect.height;
+  return { x: ((clientX - rect.left) * sX - panX) / zoomLevel, y: ((clientY - rect.top) * sY - panY) / zoomLevel };
+}
+function zoomIn() { applyZoom(zoomLevel + ZOOM_STEP); }
+function zoomOut() { applyZoom(zoomLevel - ZOOM_STEP); }
+function zoomReset() { zoomLevel = 1; panX = 0; panY = 0; drawBoard(); }
+function applyZoom(z) {
+  zoomLevel = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+  const maxPan = Math.max(0, (canvas.width * zoomLevel - canvas.width) / 2);
+  panX = Math.max(-maxPan, Math.min(maxPan, panX));
+  panY = Math.max(-maxPan, Math.min(maxPan, panY));
+  drawBoard();
+}
+function onWheel(e) {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+  const oldZoom = zoomLevel;
+  applyZoom(e.deltaY < 0 ? zoomLevel + ZOOM_STEP : zoomLevel - ZOOM_STEP);
+  panX = mx - (mx - panX) * (zoomLevel / oldZoom);
+  panY = my - (my - panY) * (zoomLevel / oldZoom);
+  drawBoard();
+}
+function onMouseDown(e) { if (e.button === 0) { _dragging = true; _dragMoved = false; _dragStart = { x: e.clientX, y: e.clientY, px: panX, py: panY }; } }
+function onMouseMove(e) {
+  if (!_dragging || !_dragStart) return;
+  if (Math.abs(e.clientX - _dragStart.x) > 2 || Math.abs(e.clientY - _dragStart.y) > 2) _dragMoved = true;
+  panX = _dragStart.px + (e.clientX - _dragStart.x) * (canvas.width / canvas.getBoundingClientRect().width);
+  panY = _dragStart.py + (e.clientY - _dragStart.y) * (canvas.height / canvas.getBoundingClientRect().height);
+  drawBoard();
+}
+function onMouseUp() { _dragging = false; }
+function onTouchStart(e) {
+  e.preventDefault();
+  for (const t of e.changedTouches) _touches[t.identifier] = { x: t.clientX, y: t.clientY };
+  if (e.touches.length === 2) {
+    _pinchStartDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    _pinchStartZoom = zoomLevel;
+    _pinchCenter = { x: (e.touches[0].clientX + e.touches[1].clientX) / 2, y: (e.touches[0].clientY + e.touches[1].clientY) / 2 };
+  }
+}
+function onTouchMove(e) {
+  e.preventDefault();
+  if (e.touches.length === 2 && _pinchStartDist > 0) {
+    const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    const newZoom = _pinchStartZoom * (dist / _pinchStartDist);
+    const rect = canvas.getBoundingClientRect();
+    const cx = (_pinchCenter.x - rect.left) * (canvas.width / rect.width);
+    const cy = (_pinchCenter.y - rect.top) * (canvas.height / rect.height);
+    const oldZoom = zoomLevel;
+    applyZoom(newZoom);
+    panX = cx - (cx - panX) * (zoomLevel / oldZoom);
+    panY = cy - (cy - panY) * (zoomLevel / oldZoom);
+    drawBoard();
+  } else if (e.touches.length === 1 && zoomLevel > 1) {
+    const t = e.touches[0], prev = _touches[t.identifier];
+    if (prev) { panX += (t.clientX - prev.x) * (canvas.width / canvas.getBoundingClientRect().width); panY += (t.clientY - prev.y) * (canvas.height / canvas.getBoundingClientRect().height); drawBoard(); }
+    for (const t2 of e.touches) _touches[t2.identifier] = { x: t2.clientX, y: t2.clientY };
+  }
+}
+function onTouchEnd(e) { for (const t of e.changedTouches) delete _touches[t.identifier]; }
 
 function resetBoard() {
   initBoard();
@@ -182,14 +288,14 @@ function toInternal(dr, dc) { return toDisplay(dr, dc); }
 function intersectionToPixel(row, col) {
   const d = toDisplay(row, col);
   return {
-    x: PADDING + d.col * CELL_SIZE,
-    y: PADDING + d.row * CELL_SIZE,
+    x: padding + d.col * cellSize,
+    y: padding + d.row * cellSize,
   };
 }
 
 function pixelToIntersection(mx, my) {
-  const dc = Math.round((mx - PADDING) / CELL_SIZE);
-  const dr = Math.round((my - PADDING) / CELL_SIZE);
+  const dc = Math.round((mx - padding) / cellSize);
+  const dr = Math.round((my - padding) / cellSize);
   return toInternal(dr, dc);
 }
 
@@ -199,6 +305,8 @@ function pixelToIntersection(mx, my) {
 function drawBoard(skipAnimating) {
   const w = canvas.width;
   const h = canvas.height;
+  ctx.save();
+  ctx.setTransform(zoomLevel, 0, 0, zoomLevel, panX, panY);
 
   // 背景
   ctx.fillStyle = "#dcb35c";
@@ -209,32 +317,32 @@ function drawBoard(skipAnimating) {
 
   // 横线（10条）
   for (let r = 0; r < ROWS; r++) {
-    const y = PADDING + r * CELL_SIZE;
+    const y = padding + r * cellSize;
     ctx.beginPath();
-    ctx.moveTo(PADDING, y);
-    ctx.lineTo(PADDING + (COLS - 1) * CELL_SIZE, y);
+    ctx.moveTo(padding, y);
+    ctx.lineTo(padding + (COLS - 1) * cellSize, y);
     ctx.stroke();
   }
 
   // 竖线（9条）：左右边框贯穿，内线在楚河汉界处断开
   for (let c = 0; c < COLS; c++) {
-    const x = PADDING + c * CELL_SIZE;
+    const x = padding + c * cellSize;
     if (c === 0 || c === COLS - 1) {
       // 边框贯穿
       ctx.beginPath();
-      ctx.moveTo(x, PADDING);
-      ctx.lineTo(x, PADDING + (ROWS - 1) * CELL_SIZE);
+      ctx.moveTo(x, padding);
+      ctx.lineTo(x, padding + (ROWS - 1) * cellSize);
       ctx.stroke();
     } else {
       // 内线断开（上半部分：行0-4）
       ctx.beginPath();
-      ctx.moveTo(x, PADDING);
-      ctx.lineTo(x, PADDING + 4 * CELL_SIZE);
+      ctx.moveTo(x, padding);
+      ctx.lineTo(x, padding + 4 * cellSize);
       ctx.stroke();
       // 内线断开（下半部分：行5-9）
       ctx.beginPath();
-      ctx.moveTo(x, PADDING + 5 * CELL_SIZE);
-      ctx.lineTo(x, PADDING + (ROWS - 1) * CELL_SIZE);
+      ctx.moveTo(x, padding + 5 * cellSize);
+      ctx.lineTo(x, padding + (ROWS - 1) * cellSize);
       ctx.stroke();
     }
   }
@@ -244,9 +352,9 @@ function drawBoard(skipAnimating) {
   ctx.font = "bold 22px KaiTi, STKaiti, serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  const riverY = PADDING + 4.5 * CELL_SIZE;
-  const leftX = PADDING + 1.5 * CELL_SIZE;
-  const rightX = PADDING + 6.5 * CELL_SIZE;
+  const riverY = padding + 4.5 * cellSize;
+  const leftX = padding + 1.5 * cellSize;
+  const rightX = padding + 6.5 * cellSize;
   ctx.fillText("楚  河", leftX, riverY);
   ctx.fillText("汉  界", rightX, riverY);
 
@@ -276,7 +384,7 @@ function drawBoard(skipAnimating) {
   if (selectedRow >= 0 && selectedCol >= 0) {
     const { x, y } = intersectionToPixel(selectedRow, selectedCol);
     ctx.beginPath();
-    ctx.arc(x, y, PIECE_RADIUS + 3, 0, Math.PI * 2);
+    ctx.arc(x, y, pieceRadius + 3, 0, Math.PI * 2);
     ctx.strokeStyle = "#f1c40f";
     ctx.lineWidth = 3;
     ctx.stroke();
@@ -308,6 +416,14 @@ function drawPalaceDiagonals(topRow, leftCol, bottomRow, rightCol) {
   ctx.moveTo(p3.x, p3.y);
   ctx.lineTo(p4.x, p4.y);
   ctx.stroke();
+
+  ctx.restore();
+  if (zoomLevel !== 1) {
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(Math.round(zoomLevel * 100) + "%", 8, canvas.height - 8);
+  }
 }
 
 // ============================================================
@@ -323,16 +439,16 @@ function drawPiece(row, col, piece, scaleX) {
 
   // 棋子圆形
   ctx.beginPath();
-  ctx.arc(0, 0, PIECE_RADIUS, 0, Math.PI * 2);
+  ctx.arc(0, 0, pieceRadius, 0, Math.PI * 2);
 
   if (piece.color === "red") {
-    const grad = ctx.createRadialGradient(-4, -4, 2, 0, 0, PIECE_RADIUS);
+    const grad = ctx.createRadialGradient(-4, -4, 2, 0, 0, pieceRadius);
     grad.addColorStop(0, "#f5c6a0");
     grad.addColorStop(0.7, "#d4956b");
     grad.addColorStop(1, "#a0522d");
     ctx.fillStyle = grad;
   } else {
-    const grad = ctx.createRadialGradient(-4, -4, 2, 0, 0, PIECE_RADIUS);
+    const grad = ctx.createRadialGradient(-4, -4, 2, 0, 0, pieceRadius);
     grad.addColorStop(0, "#e8e0d0");
     grad.addColorStop(0.7, "#c8bfa8");
     grad.addColorStop(1, "#6b6050");
@@ -346,7 +462,7 @@ function drawPiece(row, col, piece, scaleX) {
 
   // 棋子内圈
   ctx.beginPath();
-  ctx.arc(0, 0, PIECE_RADIUS - 4, 0, Math.PI * 2);
+  ctx.arc(0, 0, pieceRadius - 4, 0, Math.PI * 2);
   ctx.strokeStyle = piece.color === "red" ? "#c0392b" : "#444";
   ctx.lineWidth = 1;
   ctx.stroke();
@@ -370,7 +486,7 @@ function drawHints() {
   for (const { row, col } of validMoves) {
     const { x, y } = intersectionToPixel(row, col);
     ctx.beginPath();
-    ctx.arc(x, y, HINT_RADIUS, 0, Math.PI * 2);
+    ctx.arc(x, y, hintRadius, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(46, 204, 113, 0.45)";
     ctx.fill();
     ctx.strokeStyle = "rgba(39, 174, 96, 0.6)";
@@ -755,14 +871,10 @@ function afterLocalMove() {
 // ============================================================
 function onCanvasClick(e) {
   if (!gameStarted || gameOver || !myTurn || isAnimating) return;
+  if (_dragMoved) { _dragMoved = false; return; }
 
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
-  const mx = (e.clientX - rect.left) * scaleX;
-  const my = (e.clientY - rect.top) * scaleY;
-
-  const { row, col } = pixelToIntersection(mx, my);
+  const pt = canvasToBoard(e.clientX, e.clientY);
+  const { row, col } = pixelToIntersection(pt.x, pt.y);
   if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return;
 
   const clickedPiece = board[row][col];

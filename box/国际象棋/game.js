@@ -64,6 +64,12 @@ let lastMoveFromCol = -1;
 let lastMoveToRow = -1;
 let lastMoveToCol = -1;
 
+// ---------- 缩放/平移状态 ----------
+let zoomLevel = 1, panX = 0, panY = 0;
+const ZOOM_MIN = 0.5, ZOOM_MAX = 3.0, ZOOM_STEP = 0.25;
+let _touches = {}, _pinchStartDist = 0, _pinchStartZoom = 1, _pinchCenter = null;
+let _dragging = false, _dragStart = null, _dragMoved = false;
+
 // ============================================================
 // 初始化
 // ============================================================
@@ -87,11 +93,87 @@ function init() {
   drawBoard();
 
   canvas.addEventListener("click", onCanvasClick);
+  canvas.addEventListener("wheel", onWheel, { passive: false });
+  canvas.addEventListener("touchstart", onTouchStart, { passive: false });
+  canvas.addEventListener("touchmove", onTouchMove, { passive: false });
+  canvas.addEventListener("touchend", onTouchEnd);
+  canvas.addEventListener("mousedown", onMouseDown);
+  window.addEventListener("mousemove", onMouseMove);
+  window.addEventListener("mouseup", onMouseUp);
+  document.getElementById("btnZoomIn").addEventListener("click", zoomIn);
+  document.getElementById("btnZoomOut").addEventListener("click", zoomOut);
+  document.getElementById("btnZoomReset").addEventListener("click", zoomReset);
   window.addEventListener("message", onParentMessage);
   sendToParent({ type: "game_ready" });
   showWaiting("等待对手加入...");
   document.getElementById("statusText").textContent = "玩家：" + myInfo.username;
 }
+
+// ---------- 缩放/平移 ----------
+function canvasToBoard(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const sX = canvas.width / rect.width, sY = canvas.height / rect.height;
+  return { x: ((clientX - rect.left) * sX - panX) / zoomLevel, y: ((clientY - rect.top) * sY - panY) / zoomLevel };
+}
+function zoomIn() { applyZoom(zoomLevel + ZOOM_STEP); }
+function zoomOut() { applyZoom(zoomLevel - ZOOM_STEP); }
+function zoomReset() { zoomLevel = 1; panX = 0; panY = 0; drawBoard(); }
+function applyZoom(z) {
+  zoomLevel = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+  const maxPan = Math.max(0, (canvas.width * zoomLevel - canvas.width) / 2);
+  panX = Math.max(-maxPan, Math.min(maxPan, panX));
+  panY = Math.max(-maxPan, Math.min(maxPan, panY));
+  drawBoard();
+}
+function onWheel(e) {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+  const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+  const oldZoom = zoomLevel;
+  applyZoom(e.deltaY < 0 ? zoomLevel + ZOOM_STEP : zoomLevel - ZOOM_STEP);
+  panX = mx - (mx - panX) * (zoomLevel / oldZoom);
+  panY = my - (my - panY) * (zoomLevel / oldZoom);
+  drawBoard();
+}
+function onMouseDown(e) { if (e.button === 0) { _dragging = true; _dragMoved = false; _dragStart = { x: e.clientX, y: e.clientY, px: panX, py: panY }; } }
+function onMouseMove(e) {
+  if (!_dragging || !_dragStart) return;
+  if (Math.abs(e.clientX - _dragStart.x) > 2 || Math.abs(e.clientY - _dragStart.y) > 2) _dragMoved = true;
+  panX = _dragStart.px + (e.clientX - _dragStart.x) * (canvas.width / canvas.getBoundingClientRect().width);
+  panY = _dragStart.py + (e.clientY - _dragStart.y) * (canvas.height / canvas.getBoundingClientRect().height);
+  drawBoard();
+}
+function onMouseUp() { _dragging = false; }
+function onTouchStart(e) {
+  e.preventDefault();
+  for (const t of e.changedTouches) _touches[t.identifier] = { x: t.clientX, y: t.clientY };
+  if (e.touches.length === 2) {
+    _pinchStartDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    _pinchStartZoom = zoomLevel;
+    _pinchCenter = { x: (e.touches[0].clientX + e.touches[1].clientX) / 2, y: (e.touches[0].clientY + e.touches[1].clientY) / 2 };
+  }
+}
+function onTouchMove(e) {
+  e.preventDefault();
+  if (e.touches.length === 2 && _pinchStartDist > 0) {
+    const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    const newZoom = _pinchStartZoom * (dist / _pinchStartDist);
+    const rect = canvas.getBoundingClientRect();
+    const cx = (_pinchCenter.x - rect.left) * (canvas.width / rect.width);
+    const cy = (_pinchCenter.y - rect.top) * (canvas.height / rect.height);
+    const oldZoom = zoomLevel;
+    applyZoom(newZoom);
+    panX = cx - (cx - panX) * (zoomLevel / oldZoom);
+    panY = cy - (cy - panY) * (zoomLevel / oldZoom);
+    drawBoard();
+  } else if (e.touches.length === 1 && zoomLevel > 1) {
+    const t = e.touches[0], prev = _touches[t.identifier];
+    if (prev) { panX += (t.clientX - prev.x) * (canvas.width / canvas.getBoundingClientRect().width); panY += (t.clientY - prev.y) * (canvas.height / canvas.getBoundingClientRect().height); drawBoard(); }
+    for (const t2 of e.touches) _touches[t2.identifier] = { x: t2.clientX, y: t2.clientY };
+  }
+}
+function onTouchEnd(e) { for (const t of e.changedTouches) delete _touches[t.identifier]; }
 
 function resetBoard() {
   initBoard();
@@ -217,6 +299,8 @@ function findKing(b, color) {
 function drawBoard(skipAnimPiece) {
   const w = canvas.width;
   const h = canvas.height;
+  ctx.save();
+  ctx.setTransform(zoomLevel, 0, 0, zoomLevel, panX, panY);
 
   // 棋盘外框
   ctx.fillStyle = "#2c1810";
@@ -296,6 +380,14 @@ function drawBoard(skipAnimPiece) {
 
   // 合法走法提示
   drawHints();
+
+  ctx.restore();
+  if (zoomLevel !== 1) {
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(Math.round(zoomLevel * 100) + "%", 8, canvas.height - 8);
+  }
 }
 
 function drawPiece(row, col, piece, scaleX) {
@@ -875,14 +967,10 @@ function afterLocalMove() {
 function onCanvasClick(e) {
   if (!gameStarted || gameOver || !myTurn || isAnimating) return;
   if (pendingPromotion) return;
+  if (_dragMoved) { _dragMoved = false; return; }
 
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
-  const mx = (e.clientX - rect.left) * scaleX;
-  const my = (e.clientY - rect.top) * scaleY;
-
-  const { row, col } = pixelToSquare(mx, my);
+  const pt = canvasToBoard(e.clientX, e.clientY);
+  const { row, col } = pixelToSquare(pt.x, pt.y);
   if (row < 0 || row >= ROWS || col < 0 || col >= COLS) return;
 
   const clickedPiece = board[row][col];

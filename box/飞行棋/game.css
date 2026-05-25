@@ -657,6 +657,22 @@ button:active {
 }
 
 /* ============================================================
+   缩放按钮
+   ============================================================ */
+.zoom-controls {
+  display: flex; gap: 4px; justify-content: center; margin-top: 4px;
+}
+.zoom-controls button {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.2); background: #16213e;
+  color: #e0e0e0; font-size: 16px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 32px; min-width: 32px; padding: 0;
+  transition: background 0.2s;
+}
+.zoom-controls button:hover { background: #1a4a7a; }
+
+/* ============================================================
    响应式
    ============================================================ */
 
