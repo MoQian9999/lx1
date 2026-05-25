@@ -1,0 +1,6 @@
+{
+  "name": "象棋",
+  "emoji": "♟",
+  "minPlayers": 2,
+  "maxPlayers": 2
+}
