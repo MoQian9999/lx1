@@ -778,6 +778,7 @@ function updateTimerDisplay() {
 
 function timeoutLoss() {
   stopMoveTimer();
+  if (!myTurn) return; // 非己方回合不计超时，等对方客户端发送 timeout
   gameOver = true;
   myTurn = false;
   hideTurnHighlight();
