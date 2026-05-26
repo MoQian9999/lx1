@@ -207,7 +207,9 @@ function onMouseMove(e) {
 }
 function onMouseUp() { _dragging = false; }
 function onTouchStart(e) {
-  e.preventDefault();
+  if (e.touches.length >= 2 || zoomLevel > 1) {
+    e.preventDefault();
+  }
   for (const t of e.changedTouches) _touches[t.identifier] = { x: t.clientX, y: t.clientY };
   if (e.touches.length === 2) {
     _pinchStartDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
@@ -589,7 +591,7 @@ function drawBoard() {
   }
 
   ctx.restore();
-  if (zoomLevel !== 1) {
+  if (Math.abs(zoomLevel - 1) > 0.005) {
     ctx.fillStyle = "rgba(0,0,0,0.5)";
     ctx.font = "bold 12px sans-serif";
     ctx.textAlign = "left";
@@ -660,7 +662,7 @@ function drawTrackCells() {
       ctx.fill();
     }
 
-    // 飞点星标
+    // 飞点星标 + 入口标签
     if (isFly) {
       const ownerIdx = FLY_POINTS.indexOf(i);
       ctx.fillStyle = PLAYER_CONFIG[ownerIdx].color;
@@ -668,7 +670,29 @@ function drawTrackCells() {
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText("★", pos.x, pos.y);
+      // 入口颜色名称缩写
+      ctx.fillStyle = "#333";
+      ctx.font = "7px sans-serif";
+      ctx.fillText(PLAYER_CONFIG[ownerIdx].name + "入", pos.x, pos.y - 12);
     }
+  }
+
+  // 绘制轨道方向箭头（每隔 4 格画一个，帮助理解顺时针路径）
+  for (let i = 0; i < TRACK_COUNT; i += 4) {
+    const [r0, c0] = TRACK_POSITIONS[i];
+    const [r1, c1] = TRACK_POSITIONS[(i + 1) % TRACK_COUNT];
+    const p0 = cellToPixel(r0, c0);
+    const p1 = cellToPixel(r1, c1);
+    const midX = (p0.x + p1.x) / 2;
+    const midY = (p0.y + p1.y) / 2;
+    const angle = Math.atan2(p1.y - p0.y, p1.x - p0.x);
+    ctx.fillStyle = "rgba(100,100,100,0.5)";
+    ctx.beginPath();
+    ctx.moveTo(midX + Math.cos(angle) * 5, midY + Math.sin(angle) * 5);
+    ctx.lineTo(midX + Math.cos(angle + 2.3) * 4, midY + Math.sin(angle + 2.3) * 4);
+    ctx.lineTo(midX + Math.cos(angle - 2.3) * 4, midY + Math.sin(angle - 2.3) * 4);
+    ctx.closePath();
+    ctx.fill();
   }
 }
 
@@ -777,11 +801,21 @@ function drawCenter() {
   ctx.fill();
   ctx.stroke();
 
+  // 中心：显示各颜色进度
   ctx.fillStyle = "#333";
-  ctx.font = "bold 8px sans-serif";
+  ctx.font = "bold 10px sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("HOME", center.x, center.y);
+  const actColorsArr = [...getActiveColors()];
+  if (actColorsArr.length <= 2) {
+    ctx.fillText("终点", center.x, center.y - 2);
+    ctx.font = "6px sans-serif";
+    ctx.fillText("finish", center.x, center.y + 8);
+  } else {
+    ctx.fillText("终", center.x, center.y - 1);
+    ctx.font = "6px sans-serif";
+    ctx.fillText("点", center.x, center.y + 8);
+  }
 }
 
 function getActiveColors() {
@@ -1214,9 +1248,18 @@ function updateTurnUI() {
     status.textContent = "请掷骰子";
   } else if (myTurn && turnPhase === "move") {
     rollBtn.disabled = true;
-    flyBtn.style.display = (diceValue === 5 && ruleFlags.flyOnFive) ? "" : "none";
+    const canFly = (diceValue === 5 && ruleFlags.flyOnFive);
+    flyBtn.style.display = canFly ? "" : "none";
     nudgeBtn.classList.remove("show");
-    status.textContent = "请选择棋子移动（骰子: " + diceValue + "）";
+    if (canFly) {
+      status.textContent = '请移动棋子或点击"飞行"（骰子: 5）';
+      flyBtn.style.background = "#e67e22";
+      flyBtn.style.animation = "pulse 1s ease-in-out 3";
+    } else {
+      flyBtn.style.background = "#3498db";
+      flyBtn.style.animation = "";
+      status.textContent = "请选择棋子移动（骰子: " + diceValue + "）";
+    }
   } else if (!myTurn && !gameOver) {
     rollBtn.disabled = true;
     flyBtn.style.display = "none";
@@ -1265,11 +1308,8 @@ function applyDiceRoll(value) {
     lastMovedPiece = null;
     if (myTurn) {
       showSixPenalty();
+      sendToParent({ type: "game_action", action: "advance_turn", data: { reason: "six_penalty" } });
       setTimeout(() => { hideSixPenalty(); advanceTurn(); }, 1500);
-    } else {
-      advanceTurn();
-      drawBoard();
-      updatePlayerHeader();
     }
     return;
   }
@@ -1279,9 +1319,20 @@ function applyDiceRoll(value) {
     validMoves = getValidMoves(currentPlayerIndex, value);
 
     if (validMoves.length === 0) {
+      // 五点可飞：即使无合法移动，只要有在轨棋子仍可飞行
+      const canFlyNow = (value === 5 && ruleFlags.flyOnFive && hasFlyablePiece());
+      if (canFlyNow) {
+        turnPhase = "move";
+        selectedPieceIndex = -1;
+        selectedColorIndex = -1;
+        updateTurnUI();
+        drawBoard();
+        return;
+      }
       turnPhase = "pass";
       updateTurnUI();
       document.getElementById("statusText").textContent = "无合法移动，跳过回合";
+      sendToParent({ type: "game_action", action: "advance_turn" });
       setTimeout(() => advanceTurn(), 1000);
       return;
     }
@@ -1309,6 +1360,17 @@ function applyDiceRoll(value) {
   }
 }
 
+function hasFlyablePiece() {
+  const myColors = getMyControlledColors();
+  for (const ci of myColors) {
+    for (let i = 0; i < 4; i++) {
+      const p = pieces[ci][i];
+      if (p.state === "track") return true;
+    }
+  }
+  return false;
+}
+
 function chooseFly() {
   if (!myTurn || turnPhase !== "move" || diceValue !== 5 || !ruleFlags.flyOnFive || gameOver) return;
 
@@ -1324,8 +1386,9 @@ function chooseFly() {
         if (nextFly === -1) nextFly = FLY_POINTS[0];
 
         const move = { colorIndex: ci, pieceIndex: i, fromState: "track", fromPos: p.pos, toState: "track", toPos: nextFly };
-        sendToParent({ type: "game_action", action: "piece_fly", data: { colorIndex: ci, pieceIndex: i, toPos: nextFly } });
         executeMove(ci, i, move);
+        // 发送实际最终位置（executeMove 可能触发自动飞行链）
+        sendToParent({ type: "game_action", action: "piece_fly", data: { colorIndex: ci, pieceIndex: i, toPos: pieces[ci][i].pos } });
 
         if (checkWinForPlayer(myPlayerIndex)) {
           handleMyWin();
@@ -1538,6 +1601,37 @@ function handleReadyUpdate(msg) {
   const readyCount = players.filter(p => p.ready).length;
   document.getElementById("preGameStatus").textContent =
     "等待所有玩家准备...（" + readyCount + "/" + players.length + "）";
+
+  // 再来一局：游戏进行中/结束时，全部玩家变为未准备 → 重置到赛前界面
+  if (gameStarted && readyCount === 0) {
+    resetToPreGame();
+  }
+}
+
+function resetToPreGame() {
+  stopMoveTimer();
+  gameStarted = false;
+  gameOver = false;
+  myTurn = false;
+  diceValue = 1;
+  diceRolled = false;
+  consecutiveSixes = 0;
+  lastMovedPiece = null;
+  validMoves = [];
+  selectedPieceIndex = -1;
+  selectedColorIndex = -1;
+  nudgeSent = false;
+  document.getElementById("gamePanel").style.display = "none";
+  document.getElementById("preGamePanel").style.display = "";
+  document.getElementById("btnPlayAgain").classList.remove("show");
+  document.getElementById("btnSurrender").classList.remove("show");
+  document.getElementById("btnNudge").classList.remove("show");
+  document.getElementById("btnRoll").disabled = true;
+  document.getElementById("btnFly").style.display = "none";
+  document.getElementById("statusText").textContent = "";
+  document.getElementById("moveTimer").textContent = "60s";
+  document.getElementById("moveTimer").classList.remove("urgent");
+  drawDie(1);
 }
 
 function handleGameStart(msg) {
@@ -1696,6 +1790,19 @@ function handleGameAction(msg) {
       break;
     }
 
+    case "advance_turn":
+      if (fromIdx !== myPlayerIndex) {
+        if (msg.data && msg.data.reason === "six_penalty") {
+          showSixPenalty();
+          setTimeout(() => { hideSixPenalty(); advanceTurn(); drawBoard(); updatePlayerHeader(); }, 1500);
+        } else {
+          advanceTurn();
+          drawBoard();
+          updatePlayerHeader();
+        }
+      }
+      break;
+
     case "surrender":
       gameOver = true;
       stopMoveTimer();
@@ -1844,18 +1951,8 @@ function showNudgeToast(from) {
 }
 
 function playAgain() {
-  stopMoveTimer();
-  gameStarted = false;
-  gameOver = false;
-  myTurn = false;
   sendToParent({ type: "play_again" });
-
-  document.getElementById("gamePanel").style.display = "none";
-  document.getElementById("preGamePanel").style.display = "";
-  document.getElementById("btnPlayAgain").classList.remove("show");
-  document.getElementById("btnSurrender").classList.remove("show");
-  document.getElementById("btnNudge").classList.remove("show");
-
+  resetToPreGame();
   myReady = false;
   document.getElementById("btnReady").textContent = "准备";
   document.getElementById("btnReady").classList.remove("is-ready");

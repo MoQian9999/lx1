@@ -56,7 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         pendingGameMessages = [];
       }
-    } else if (msg.type === "game_action" || msg.type === "play_again" || msg.type === "game_over" || msg.type === "set_ready") {
+    } else if (msg.type === "game_action" || msg.type === "play_again" || msg.type === "game_over" || msg.type === "set_ready" || msg.type === "leave_room") {
       // 将游戏 iframe 的操作转发到服务器
       sendMessage(msg);
     }
@@ -196,12 +196,12 @@ function handleMessage(msg) {
       break;
 
     case "ready_update":
+      // customReady 游戏：始终转发给 iframe（不受 _gameActive 限制）
+      if (window._customReadyGame) {
+        notifyGameIframe(msg);
+        return;
+      }
       if (window._gameActive) {
-        // customReady 游戏：转发给 iframe 让它知道其他玩家准备状态
-        if (window._customReadyGame) {
-          notifyGameIframe(msg);
-          return;
-        }
         // 普通游戏再来一局：清除游戏 iframe，回到房间面板
         const iframe = document.getElementById("gameIframe");
         iframe.src = "";
@@ -642,6 +642,8 @@ function closeRoomModal() {
 function enterGame(roomId, gameName) {
   document.getElementById("mainContent").style.display = "none";
   document.getElementById("gameContainer").style.display = "flex";
+  // 隐藏房间面板（customReady 游戏由游戏自身管理准备流程）
+  document.getElementById("roomPanel").style.display = "none";
 
   const iframe = document.getElementById("gameIframe");
   iframe.style.display = "block";

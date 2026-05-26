@@ -146,7 +146,9 @@ function onMouseMove(e) {
 }
 function onMouseUp() { _dragging = false; }
 function onTouchStart(e) {
-  e.preventDefault();
+  if (e.touches.length >= 2 || zoomLevel > 1) {
+    e.preventDefault();
+  }
   for (const t of e.changedTouches) _touches[t.identifier] = { x: t.clientX, y: t.clientY };
   if (e.touches.length === 2) {
     _pinchStartDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
@@ -382,7 +384,7 @@ function drawBoard(skipAnimPiece) {
   drawHints();
 
   ctx.restore();
-  if (zoomLevel !== 1) {
+  if (Math.abs(zoomLevel - 1) > 0.005) {
     ctx.fillStyle = "rgba(0,0,0,0.5)";
     ctx.font = "bold 12px sans-serif";
     ctx.textAlign = "left";
