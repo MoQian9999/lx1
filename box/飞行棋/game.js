@@ -7,42 +7,48 @@
 const GRID = 15;
 const MAX_CELL = 42;
 const MIN_CELL = 22;
-const TRACK_COUNT = 52;
+const TRACK_COUNT = 56;
 const HOME_COUNT = 6;
 // 动态尺寸（根据视口自动调整）
 let cell = MAX_CELL;
 let margin = 36;
 let pieceR = 13;
 
-// 52 个轨道位置（顺时针，15x15 网格坐标 [row, col]）
+// 56 个轨道位置（顺时针，15x15 网格坐标 [row, col]）
+// 4 个臂尖单元格 [0,7][7,14][14,7][7,0] 纳入轨道，消除视觉断裂
 const TRACK_POSITIONS = [
   [0,8], [1,8], [2,8], [3,8], [4,8], [5,8],   // 0-5: 顶臂右缘下行
   [5,9],                                         // 6: 顶右角
-  [6,9], [6,10], [6,11], [6,12], [6,13], [6,14], // 7-12: 右臂上缘右行
-  [8,14], [8,13], [8,12], [8,11], [8,10], [8,9], // 13-18: 右臂下缘左行
-  [9,9],                                         // 19: 底右角
-  [9,8], [10,8], [11,8], [12,8], [13,8], [14,8], // 20-25: 底臂右缘下行
-  [14,6], [13,6], [12,6], [11,6], [10,6], [9,6], // 26-31: 底臂左缘上行
-  [9,5],                                         // 32: 底左角
-  [8,5], [8,4], [8,3], [8,2], [8,1], [8,0],     // 33-38: 左臂下缘左行
-  [6,0], [6,1], [6,2], [6,3], [6,4], [6,5],     // 39-44: 左臂上缘右行
-  [5,5],                                         // 45: 顶左角
-  [5,6], [4,6], [3,6], [2,6], [1,6], [0,6],     // 46-51: 顶臂左缘上行
+  [6,9], [6,10], [6,11], [6,12], [6,13], [6,14],// 7-12: 右臂上缘右行
+  [7,14],                                        // 13: 右臂尖
+  [8,14], [8,13], [8,12], [8,11], [8,10], [8,9],// 14-19: 右臂下缘左行
+  [9,9],                                         // 20: 底右角
+  [9,8], [10,8], [11,8], [12,8], [13,8], [14,8],// 21-26: 底臂右缘下行
+  [14,7],                                        // 27: 底臂尖
+  [14,6], [13,6], [12,6], [11,6], [10,6], [9,6],// 28-33: 底臂左缘上行
+  [9,5],                                         // 34: 底左角
+  [8,5], [8,4], [8,3], [8,2], [8,1], [8,0],     // 35-40: 左臂下缘左行
+  [7,0],                                         // 41: 左臂尖
+  [6,0], [6,1], [6,2], [6,3], [6,4], [6,5],     // 42-47: 左臂上缘右行
+  [5,5],                                         // 48: 顶左角
+  [5,6], [4,6], [3,6], [2,6], [1,6], [0,6],     // 49-54: 顶臂左缘上行
+  [0,7],                                         // 55: 顶臂尖
 ];
 
 // 玩家配置 [入口轨道位置, 颜色, 主场列, 基地位置]
 const PLAYER_CONFIG = [
   { entryPos: 0,  color: "#e74c3c", name: "红", homeCol: [[1,7],[2,7],[3,7],[4,7],[5,7],[6,7]], base: [[1,1],[1,2],[2,1],[2,2]] },
-  { entryPos: 13, color: "#3498db", name: "蓝", homeCol: [[7,13],[7,12],[7,11],[7,10],[7,9],[7,8]], base: [[1,12],[1,13],[2,12],[2,13]] },
-  { entryPos: 26, color: "#2ecc71", name: "绿", homeCol: [[13,7],[12,7],[11,7],[10,7],[9,7],[8,7]], base: [[12,12],[12,13],[13,12],[13,13]] },
-  { entryPos: 39, color: "#f1c40f", name: "黄", homeCol: [[7,1],[7,2],[7,3],[7,4],[7,5],[7,6]], base: [[12,1],[12,2],[13,1],[13,2]] },
+  { entryPos: 14, color: "#3498db", name: "蓝", homeCol: [[7,13],[7,12],[7,11],[7,10],[7,9],[7,8]], base: [[1,12],[1,13],[2,12],[2,13]] },
+  { entryPos: 28, color: "#2ecc71", name: "绿", homeCol: [[13,7],[12,7],[11,7],[10,7],[9,7],[8,7]], base: [[12,12],[12,13],[13,12],[13,13]] },
+  { entryPos: 42, color: "#f1c40f", name: "黄", homeCol: [[7,1],[7,2],[7,3],[7,4],[7,5],[7,6]], base: [[12,1],[12,2],[13,1],[13,2]] },
 ];
 
 // 飞点 = 各玩家入口位置（轨道索引）
-const FLY_POINTS = [0, 13, 26, 39];
+const FLY_POINTS = [0, 14, 28, 42];
+const FLY_STEP = Math.floor(TRACK_COUNT / 4);  // 14，飞点间距
 
 // 安全格 = 入口 + 四角
-const SAFE_SQUARES = new Set([0, 6, 13, 19, 26, 32, 39, 45]);
+const SAFE_SQUARES = new Set([0, 6, 14, 20, 28, 34, 42, 48]);
 
 // ============================================================
 // 状态变量
@@ -154,7 +160,7 @@ function fitCanvasToViewport() {
   cell = Math.min(MAX_CELL, cellByW, cellByH);
   cell = Math.max(MIN_CELL, cell);
   margin = Math.max(18, Math.floor(cell * 0.86));
-  pieceR = Math.floor(cell * 0.31);
+  pieceR = Math.floor(cell * 0.36);
   const w = GRID * cell + margin * 2;
   canvas.width = w;
   canvas.height = w;
@@ -501,15 +507,22 @@ function buildPlayerHeader() {
   header.innerHTML = "";
 
   for (let i = 0; i < playerCount; i++) {
-    const cfg = PLAYER_CONFIG[i];
     const ap = allPlayers[i];
     const div = document.createElement("div");
     div.className = "player-info";
     div.id = "playerInfo_" + i;
 
-    const dot = document.createElement("div");
-    dot.className = "player-color-dot";
-    dot.style.backgroundColor = cfg.color;
+    // 多点色表示双色模式
+    const colors = getPlayerColors(i);
+    const dotsWrap = document.createElement("span");
+    dotsWrap.style.cssText = "display:flex;gap:2px;align-items:center";
+    for (const ci of colors) {
+      const dot = document.createElement("div");
+      dot.className = "player-color-dot";
+      dot.style.backgroundColor = PLAYER_CONFIG[ci].color;
+      dotsWrap.appendChild(dot);
+    }
+    div.appendChild(dotsWrap);
 
     const avatar = document.createElement("div");
     avatar.className = "player-avatar";
@@ -524,9 +537,8 @@ function buildPlayerHeader() {
     const progress = document.createElement("span");
     progress.className = "player-progress";
     progress.id = "playerProgress_" + i;
-    progress.textContent = "0/4";
+    progress.textContent = "0/" + (colors.length * 4);
 
-    div.appendChild(dot);
     div.appendChild(avatar);
     div.appendChild(name);
     div.appendChild(progress);
@@ -570,9 +582,10 @@ function updatePlayerHeader() {
 function drawBoard() {
   const w = canvas.width;
   const h = canvas.height;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, w, h);
   ctx.save();
   ctx.setTransform(zoomLevel, 0, 0, zoomLevel, panX, panY);
-  ctx.clearRect(0, 0, w, h);
 
   // 背景
   ctx.fillStyle = "#f0d9b5";
@@ -602,9 +615,9 @@ function drawBoard() {
 function drawCrossCells() {
   for (let r = 0; r < GRID; r++) {
     for (let c = 0; c < GRID; c++) {
+      if (isTrackCell(r, c)) continue;
       const inCross = (c >= 6 && c <= 8) || (r >= 6 && r <= 8);
       if (inCross) {
-        // 检查是否是主场列
         const isHomeCol = isHomeColumnCell(r, c);
         const pos = cellToPixel(r, c);
         ctx.fillStyle = isHomeCol ? "#e8dcc8" : "#f5e6cc";
@@ -615,6 +628,13 @@ function drawCrossCells() {
       }
     }
   }
+}
+
+// 轨道单元格坐标集合（用于跨格绘制时排除）
+const TRACK_CELL_SET = new Set(TRACK_POSITIONS.map(([r, c]) => r * GRID + c));
+
+function isTrackCell(r, c) {
+  return TRACK_CELL_SET.has(r * GRID + c);
 }
 
 function isHomeColumnCell(r, c) {
@@ -632,7 +652,7 @@ function drawTrackCells() {
     const pos = cellToPixel(r, c);
     const isFly = FLY_POINTS.includes(i);
     const isSafe = SAFE_SQUARES.has(i);
-    const isCorner = [6, 19, 32, 45].includes(i);
+    const isCorner = [6, 20, 34, 48].includes(i);
 
     // 飞点 / 入口着色
     if (isFly) {
@@ -646,11 +666,12 @@ function drawTrackCells() {
     }
 
     // 轨道点
+    const trackDotR = Math.max(4, Math.floor(cell * 0.25));
     ctx.fillStyle = "#fff";
     ctx.strokeStyle = "#999";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.arc(pos.x, pos.y, 7, 0, Math.PI * 2);
+    ctx.arc(pos.x, pos.y, trackDotR, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
@@ -658,22 +679,22 @@ function drawTrackCells() {
     if (isCorner) {
       ctx.fillStyle = "#333";
       ctx.beginPath();
-      ctx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
+      ctx.arc(pos.x, pos.y, Math.max(2, trackDotR * 0.55), 0, Math.PI * 2);
       ctx.fill();
     }
 
     // 飞点星标 + 入口标签
     if (isFly) {
       const ownerIdx = FLY_POINTS.indexOf(i);
+      const labelSize = Math.max(6, Math.floor(cell * 0.2));
       ctx.fillStyle = PLAYER_CONFIG[ownerIdx].color;
-      ctx.font = "bold 10px sans-serif";
+      ctx.font = "bold " + Math.max(9, Math.floor(cell * 0.25)) + "px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText("★", pos.x, pos.y);
-      // 入口颜色名称缩写
       ctx.fillStyle = "#333";
-      ctx.font = "7px sans-serif";
-      ctx.fillText(PLAYER_CONFIG[ownerIdx].name + "入", pos.x, pos.y - 12);
+      ctx.font = labelSize + "px sans-serif";
+      ctx.fillText(PLAYER_CONFIG[ownerIdx].name + "入", pos.x, pos.y - cell * 0.32);
     }
   }
 
@@ -826,6 +847,16 @@ function getActiveColors() {
   return colors;
 }
 
+function darkenColor(hex, factor) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const dr = Math.round(r * (1 - factor));
+  const dg = Math.round(g * (1 - factor));
+  const db = Math.round(b * (1 - factor));
+  return "#" + [dr, dg, db].map(v => v.toString(16).padStart(2, "0")).join("");
+}
+
 function drawPieces() {
   let hasSelected = selectedPieceIndex >= 0;
   const activeColors = getActiveColors();
@@ -876,21 +907,21 @@ function drawPieces() {
       const grad = ctx.createRadialGradient(px - 2, py - 2, 1, px, py, pieceR);
       grad.addColorStop(0, "#fff");
       grad.addColorStop(0.4, cfg.color);
-      grad.addColorStop(1, "#000");
+      grad.addColorStop(1, darkenColor(cfg.color, 0.3));
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.arc(px, py, pieceR, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.strokeStyle = "#333";
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
       ctx.shadowColor = "transparent";
       ctx.shadowBlur = 0;
 
+      ctx.strokeStyle = "rgba(0,0,0,0.3)";
+      ctx.lineWidth = Math.max(1, pieceR * 0.12);
+      ctx.stroke();
+
       ctx.fillStyle = "#fff";
-      ctx.font = "bold 9px sans-serif";
+      ctx.font = "bold " + Math.max(8, Math.floor(pieceR * 0.7)) + "px sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText((i + 1).toString(), px, py);
@@ -1103,7 +1134,7 @@ function executeMove(colorIndex, pieceIndex, move) {
   if (move.toState === "track" && FLY_POINTS.includes(move.toPos)) {
     const flyIdx = FLY_POINTS.indexOf(move.toPos);
     if (flyIdx === colorIndex) {
-      const nextFly = (move.toPos + 13) % TRACK_COUNT;
+      const nextFly = (move.toPos + FLY_STEP) % TRACK_COUNT;
       if (FLY_POINTS.includes(nextFly)) {
         piece.pos = nextFly;
       }
@@ -1120,7 +1151,7 @@ function executeMove(colorIndex, pieceIndex, move) {
   if (piece.state === "track" && FLY_POINTS.includes(piece.pos)) {
     const flyIdx = FLY_POINTS.indexOf(piece.pos);
     if (flyIdx === colorIndex) {
-      const nextFly = (piece.pos + 13) % TRACK_COUNT;
+      const nextFly = (piece.pos + FLY_STEP) % TRACK_COUNT;
       if (FLY_POINTS.includes(nextFly)) {
         piece.pos = nextFly;
         if (piece.state === "track") {
@@ -1227,9 +1258,7 @@ function advanceTurn() {
   }
 
   updateTurnUI();
-  if (myTurn) {
-    startMoveTimer();
-  }
+  startMoveTimer();
   drawBoard();
   updatePlayerHeader();
 }
@@ -1708,7 +1737,7 @@ function handleGameStart(msg) {
   drawDie(1);
 
   updateTurnUI();
-  if (myTurn) startMoveTimer();
+  startMoveTimer();
 
   document.getElementById("statusText").textContent = myTurn ? "请掷骰子" : "等待对手行动...";
 }
@@ -1856,11 +1885,15 @@ function startMoveTimer() {
   moveTimerInterval = setInterval(() => {
     moveTimeLeft--;
     updateTimerDisplay();
-    if (moveTimeLeft <= 10) {
+    if (moveTimeLeft <= 10 && moveTimeLeft >= 0) {
       document.getElementById("moveTimer").classList.add("urgent");
     }
     if (moveTimeLeft <= 0) {
-      timeoutLoss();
+      if (myTurn) {
+        timeoutLoss();
+      } else {
+        stopMoveTimer();
+      }
     }
   }, 1000);
 }
@@ -1873,7 +1906,12 @@ function stopMoveTimer() {
 }
 
 function updateTimerDisplay() {
-  document.getElementById("moveTimer").textContent = moveTimeLeft + "s";
+  let label = "";
+  try {
+    const colors = getPlayerColors(currentPlayerIndex);
+    label = colors.map(ci => PLAYER_CONFIG[ci].name).join("/") + " ";
+  } catch (_) {}
+  document.getElementById("moveTimer").textContent = label + moveTimeLeft + "s";
 }
 
 function timeoutLoss() {

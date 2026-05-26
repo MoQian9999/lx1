@@ -258,6 +258,8 @@ function drawBoard(skipAnimating) {
   const w = canvas.width;
   const h = canvas.height;
 
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, w, h);
   ctx.save();
   ctx.setTransform(zoomLevel, 0, 0, zoomLevel, panX, panY);
 
