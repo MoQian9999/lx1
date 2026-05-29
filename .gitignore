@@ -66,3 +66,5 @@ target/
 *.temp
 .cache/
 coverage/
+dist-pkg/
+scheduled-tasks.json

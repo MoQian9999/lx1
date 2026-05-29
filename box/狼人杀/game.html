@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>狼人杀</title>
+<link rel="stylesheet" href="game.css">
+</head>
+<body>
+
+<!-- ============================================================
+ 预游戏面板：俯视桌面 + 配置 + 卡牌信息
+============================================================ -->
+<div id="preGamePanel">
+  <!-- 左上角按钮组 -->
+  <div id="topLeftButtons">
+    <button id="btnCardInfo" class="btn-icon-corner" title="卡牌信息">📖</button>
+    <button id="btnConfig" class="btn-icon-corner" title="游戏配置" style="top:64px">⚙️</button>
+  </div>
+
+  <!-- 俯视桌面视图（纯 Canvas，含法官位+玩家座位） -->
+  <div id="tableContainer">
+    <canvas id="tableCanvas"></canvas>
+  </div>
+
+  <!-- 底部：缩放控件 + 开始按钮 -->
+  <div id="preGameActions">
+    <div id="zoomControls">
+      <button id="btnZoomOut" class="btn-zoom" title="缩小">−</button>
+      <span id="zoomLabel">100%</span>
+      <button id="btnZoomIn" class="btn-zoom" title="放大">+</button>
+      <button id="btnZoomReset" class="btn-zoom-reset" title="重置缩放">↺</button>
+    </div>
+    <div id="gameActionButtons">
+      <button id="btnStartGame" class="btn-primary-large" disabled>开始游戏</button>
+      <button id="btnLeaveRoom" class="btn-secondary">离开房间</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+ 配置面板（侧边栏弹出）
+============================================================ -->
+<div id="configOverlay" class="overlay hidden">
+  <div id="configPanel" class="side-panel">
+    <div class="panel-header">
+      <h2>⚙️ 游戏配置</h2>
+      <button class="btn-close" id="btnCloseConfig">✕</button>
+    </div>
+    <div class="panel-body">
+      <!-- 总人数 -->
+      <section class="config-section">
+        <h3>总玩家数</h3>
+        <div class="range-control">
+          <button class="btn-sm" id="btnDecreasePlayers">−</button>
+          <span class="range-value" id="totalPlayersDisplay">6</span>
+          <button class="btn-sm" id="btnIncreasePlayers">+</button>
+        </div>
+      </section>
+
+      <!-- 角色配置 -->
+      <section class="config-section">
+        <h3>角色配置 <span class="role-count-warning" id="roleCountWarning"></span></h3>
+        <div id="roleConfigGrid" class="role-config-grid"></div>
+        <!-- 添加扩展角色 -->
+        <div class="add-role-row">
+          <select id="selectExpansionRole" class="select-sm">
+            <option value="">添加扩展角色...</option>
+          </select>
+        </div>
+        <!-- 添加通用民 -->
+        <button id="btnAddGenericVillager" class="btn-secondary-sm">+ 添加通用民（AI虚拟村民）</button>
+        <div id="genericVillagerInfo" class="generic-info hidden">
+          通用民: <span id="genericVillagerCount">0</span> 个
+        </div>
+      </section>
+
+      <!-- 可选规则 -->
+      <section class="config-section">
+        <h3>可选规则</h3>
+        <label class="toggle-row">
+          <input type="checkbox" id="ruleWitchSelfSave">
+          <span>女巫首夜后可自救</span>
+        </label>
+        <label class="toggle-row">
+          <input type="checkbox" id="ruleRandomSeats">
+          <span>随机座位（开局随机打乱玩家座位）</span>
+        </label>
+        <label class="toggle-row">
+          <input type="checkbox" id="ruleRandomOrder">
+          <span>随机排序（开局随机发言顺序偏移）</span>
+        </label>
+        <label class="toggle-row">
+          <input type="checkbox" id="ruleMassacre">
+          <span>屠城模式（狼人需击杀所有好人）</span>
+        </label>
+        <label class="toggle-row">
+          <input type="checkbox" id="ruleNoSheriff">
+          <span>不设警长（12人及以上局）</span>
+        </label>
+        <label class="toggle-row">
+          <input type="checkbox" id="ruleNoMilkPenetrate">
+          <span>不奶穿（同守同救不致死）</span>
+        </label>
+      </section>
+
+      <!-- 模板 -->
+      <section class="config-section">
+        <h3>配置模板</h3>
+        <div class="template-row">
+          <input type="text" id="templateName" placeholder="模板名称" class="input-sm">
+          <button id="btnSaveTemplate" class="btn-sm">保存</button>
+        </div>
+        <div class="template-row">
+          <select id="selectTemplate" class="select-sm">
+            <option value="">加载模板...</option>
+          </select>
+          <button id="btnLoadTemplate" class="btn-sm">加载</button>
+          <button id="btnDeleteTemplate" class="btn-sm btn-danger-sm">删除</button>
+        </div>
+        <div class="template-row">
+          <button id="btnExportTemplate" class="btn-sm">导出JSON</button>
+          <button id="btnImportTemplate" class="btn-sm">导入JSON</button>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+ 卡牌信息面板
+============================================================ -->
+<div id="cardInfoOverlay" class="overlay hidden">
+  <div id="cardInfoPanel" class="side-panel card-info-panel">
+    <div class="panel-header">
+      <h2>📖 游戏指南</h2>
+      <button class="btn-close" id="btnCloseCardInfo">✕</button>
+    </div>
+    <div class="panel-body">
+      <div class="tabs">
+        <button class="tab active" data-tab="roles">角色介绍</button>
+        <button class="tab" data-tab="terms">术语表</button>
+        <button class="tab" data-tab="flow">游戏流程</button>
+        <button class="tab" data-tab="rules">游戏规则</button>
+      </div>
+      <div class="tab-content active" id="tabRoles"></div>
+      <div class="tab-content" id="tabTerms"></div>
+      <div class="tab-content" id="tabFlow"></div>
+      <div class="tab-content" id="tabRules"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+ 游戏面板
+============================================================ -->
+<div id="gamePanel" class="hidden">
+  <!-- 顶栏 -->
+  <div id="topBar">
+    <div class="top-left">
+      <span id="phaseIcon">🌙</span>
+      <span id="phaseName">等待中</span>
+    </div>
+    <div class="top-center">
+      <div id="timerBar">
+        <div id="timerFill"></div>
+        <span id="timerText">00:00</span>
+      </div>
+    </div>
+    <div class="top-right">
+      <div id="sheriffBadge" class="hidden">
+        ⭐ <span id="sheriffSeatDisplay">警长: -</span>
+      </div>
+      <button id="btnMute" class="btn-icon-sm" title="静音">🔊</button>
+    </div>
+  </div>
+
+  <!-- 中央区域 -->
+  <div id="centerArea">
+    <!-- 等待阶段：小桌面视图 + 状态 -->
+    <div id="phaseWaiting" class="phase-content">
+      <canvas id="miniTableCanvas"></canvas>
+      <div id="waitingStatus">等待游戏开始...</div>
+    </div>
+
+    <!-- 警长竞选 -->
+    <div id="phaseSheriff" class="phase-content hidden">
+      <h3>🗳️ 警长竞选</h3>
+      <div id="sheriffCandidates" class="candidate-grid"></div>
+      <button id="btnSheriffAbstain" class="btn-secondary">弃权</button>
+      <div id="sheriffResult" class="hidden"></div>
+    </div>
+
+    <!-- 夜间阶段 -->
+    <div id="phaseNight" class="phase-content hidden">
+      <div id="nightOverlay">
+        <h2>🌙 天黑请闭眼</h2>
+        <p id="nightPrompt"></p>
+        <div id="nightTargetGrid" class="target-grid"></div>
+        <div id="nightActionButtons" class="action-buttons"></div>
+      </div>
+    </div>
+
+    <!-- 天亮 -->
+    <div id="phaseDawn" class="phase-content hidden">
+      <div id="dawnAnimation">
+        <h2>☀️ 天亮了</h2>
+        <p id="dawnMessage"></p>
+      </div>
+    </div>
+
+    <!-- 遗言 -->
+    <div id="phaseLastWords" class="phase-content hidden">
+      <h3>💬 遗言阶段</h3>
+      <textarea id="lastWordsInput" placeholder="输入遗言..." maxlength="200"></textarea>
+      <button id="btnSubmitLastWords" class="btn-primary">提交遗言</button>
+      <div id="lastWordsDisplay" class="hidden">
+        <p id="lastWordsText"></p>
+      </div>
+    </div>
+
+    <!-- 发言阶段 -->
+    <div id="phaseSpeech" class="phase-content hidden">
+      <h3>🗣️ 发言阶段</h3>
+      <div id="speechQueue" class="speech-queue"></div>
+      <div id="currentSpeakerInfo" class="hidden">
+        <div class="speaker-badge">🎤 <span id="speakerSeat"></span>号 正在发言</div>
+        <div id="speechTimerBar"><div id="speechTimerFill"></div></div>
+      </div>
+      <button id="btnEndSpeech" class="btn-primary hidden">结束发言</button>
+    </div>
+
+    <!-- 投票阶段 -->
+    <div id="phaseVote" class="phase-content hidden">
+      <h3>🗳️ 放逐投票</h3>
+      <div id="voteGrid" class="target-grid"></div>
+      <button id="btnVoteAbstain" class="btn-secondary">弃权</button>
+      <div id="voteTally" class="vote-tally hidden"></div>
+    </div>
+
+    <!-- 游戏结束 -->
+    <div id="phaseGameOver" class="phase-content hidden">
+      <h2 id="gameOverTitle"></h2>
+      <p id="gameOverReason"></p>
+      <div id="roleRevealTable"></div>
+      <button id="btnPlayAgain" class="btn-primary">再来一局</button>
+    </div>
+  </div>
+
+  <!-- 底栏 -->
+  <div id="bottomBar">
+    <div class="bottom-left">
+      <span id="mySeatDisplay">座位: -</span>
+    </div>
+    <div class="bottom-right">
+      <button id="btnRoleCard" class="btn-role-card">
+        <span id="roleCardIcon">🃏</span>
+        <span id="roleCardName">角色卡</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 角色卡弹窗 -->
+  <div id="roleCardOverlay" class="overlay hidden">
+    <div id="roleCardPopup" class="popup-card">
+      <button class="btn-close" id="btnCloseRoleCard">✕</button>
+      <div class="role-card-icon" id="popupRoleIcon">🃏</div>
+      <h2 id="popupRoleName">角色名称</h2>
+      <div class="role-card-team" id="popupRoleTeam"></div>
+      <p class="role-card-desc" id="popupRoleDesc"></p>
+      <div class="role-card-status" id="popupRoleStatus"></div>
+    </div>
+  </div>
+
+  <!-- 结果面板弹窗 -->
+  <div id="resultOverlay" class="overlay hidden">
+    <div id="resultPopup" class="popup-card">
+      <h2 id="resultTitle"></h2>
+      <p id="resultReason"></p>
+      <div id="resultTable"></div>
+      <button id="btnResultPlayAgain" class="btn-primary">再来一局</button>
+      <button id="btnResultLeave" class="btn-secondary">返回大厅</button>
+    </div>
+  </div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>

@@ -1,0 +1,571 @@
+/* ============================================================
+ 狼人杀 - 暗黑哥特主题样式
+============================================================ */
+
+/* ===== CSS 变量 / 全局重置 ===== */
+:root {
+  --bg: #0a0a0f;
+  --bg-light: #12121a;
+  --surface: #1a1a2e;
+  --surface-light: #242440;
+  --border: #2a2a3e;
+  --text: #d4c5b9;
+  --text-dim: #8a8a9a;
+  --text-bright: #f0e6dc;
+  --accent-gold: #c9a84c;
+  --accent-red: #8b0000;
+  --accent-red-light: #c0392b;
+  --accent-green: #2e7d32;
+  --accent-green-light: #4caf50;
+  --accent-blue: #1565c0;
+  --werewolf-color: #8b0000;
+  --villager-color: #2e7d32;
+  --third-party-color: #7b1fa2;
+  --danger: #e74c3c;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --transition: 0.3s ease;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Microsoft YaHei", "PingFang SC", "Helvetica Neue", sans-serif;
+  width: 100vw; height: 100vh;
+  overflow: hidden;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+}
+
+.hidden { display: none !important; }
+
+/* ===== 按钮基础 ===== */
+button {
+  font-family: inherit; cursor: pointer; border: none;
+  border-radius: var(--radius); transition: var(--transition);
+  font-size: 14px;
+}
+button:active { transform: scale(0.96); }
+
+.btn-primary {
+  background: var(--accent-gold); color: #1a1a1a;
+  padding: 10px 24px; font-weight: bold; font-size: 15px;
+}
+.btn-primary:hover { background: #d4b35a; }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-primary-large {
+  background: var(--accent-gold); color: #1a1a1a;
+  padding: 14px 48px; font-weight: bold; font-size: 18px; border-radius: var(--radius-lg);
+}
+.btn-primary-large:hover:not(:disabled) { background: #d4b35a; }
+.btn-primary-large:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.btn-secondary {
+  background: var(--surface-light); color: var(--text);
+  padding: 8px 20px; border: 1px solid var(--border);
+}
+.btn-secondary:hover { background: var(--border); }
+
+.btn-sm {
+  background: var(--surface-light); color: var(--text);
+  padding: 5px 12px; font-size: 13px;
+}
+.btn-danger-sm { background: var(--danger); color: white; padding: 5px 12px; font-size: 13px; }
+
+.btn-secondary-sm {
+  background: var(--surface-light); color: var(--text);
+  padding: 6px 14px; font-size: 13px; border: 1px solid var(--border);
+  width: 100%; margin-top: 8px;
+}
+
+.btn-close {
+  background: none; color: var(--text-dim); font-size: 20px;
+  width: 32px; height: 32px; line-height: 32px; text-align: center;
+}
+.btn-close:hover { color: var(--text-bright); }
+
+.btn-icon-corner {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: var(--surface); border: 2px solid var(--accent-gold);
+  color: var(--accent-gold); font-size: 20px;
+  display: flex; align-items: center; justify-content: center;
+}
+.btn-icon-corner:hover { background: var(--surface-light); }
+
+/* Remove old btn-config-gear (now in topLeftButtons) */
+.btn-config-gear { display: none; }
+
+.btn-icon-sm {
+  background: none; color: var(--text-dim); font-size: 18px;
+  width: 36px; height: 36px; border-radius: 50%;
+}
+.btn-icon-sm:hover { color: var(--text-bright); background: var(--surface-light); }
+
+.btn-role-card {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface); border: 1px solid var(--accent-gold);
+  padding: 8px 16px; border-radius: var(--radius-lg); color: var(--text);
+  box-shadow: 0 0 8px rgba(201,168,76,0.25);
+  animation: roleCardPulse 3s ease-in-out infinite;
+}
+.btn-role-card:hover { border-color: var(--accent-gold); background: var(--surface-light); box-shadow: 0 0 16px rgba(201,168,76,0.4); }
+.btn-role-card span:first-child { font-size: 24px; }
+@keyframes roleCardPulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(201,168,76,0.25); }
+  50% { box-shadow: 0 0 14px rgba(201,168,76,0.4); }
+}
+
+.btn-config-gear {
+  position: absolute; right: -40px; top: 50%; transform: translateY(-50%);
+  background: var(--surface); border: 1px solid var(--accent-gold);
+  color: var(--accent-gold); width: 32px; height: 32px;
+  border-radius: 50%; font-size: 16px; display: flex;
+  align-items: center; justify-content: center;
+}
+.btn-config-gear:hover { background: var(--surface-light); }
+
+/* ===== 输入控件 ===== */
+input[type="text"], textarea, select {
+  background: var(--bg-light); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 8px 12px; font-family: inherit; font-size: 14px;
+}
+input[type="text"]:focus, textarea:focus, select:focus {
+  outline: none; border-color: var(--accent-gold);
+}
+
+.input-sm { flex: 1; padding: 6px 10px; font-size: 13px; }
+.select-sm { padding: 6px 10px; font-size: 13px; min-width: 140px; }
+
+textarea {
+  width: 100%; height: 100px; resize: none;
+}
+
+/* ===== 覆盖层 ===== */
+.overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7); z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ===== 侧边面板（配置/卡牌信息） ===== */
+.side-panel {
+  background: var(--surface); width: 480px; max-width: 95vw;
+  max-height: 90vh; border-radius: var(--radius-lg);
+  display: flex; flex-direction: column; overflow: hidden;
+  border: 1px solid var(--border);
+}
+.panel-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 20px; border-bottom: 1px solid var(--border);
+}
+.panel-header h2 { font-size: 18px; color: var(--accent-gold); }
+.panel-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
+
+/* ===== 配置面板各节 ===== */
+.config-section {
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.config-section h3 { font-size: 14px; color: var(--text-dim); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+
+.range-control {
+  display: flex; align-items: center; gap: 16px; justify-content: center;
+}
+.range-value { font-size: 28px; font-weight: bold; color: var(--accent-gold); min-width: 50px; text-align: center; }
+
+.role-config-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+}
+.role-config-item {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--bg-light); padding: 8px 12px; border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+.role-config-item .role-name { font-size: 14px; }
+.role-config-item .role-count-controls { display: flex; align-items: center; gap: 6px; }
+.role-config-item .role-count { font-size: 16px; font-weight: bold; width: 20px; text-align: center; color: var(--accent-gold); }
+.role-config-item .btn-count { width: 24px; height: 24px; border-radius: 50%; font-size: 14px; background: var(--surface-light); color: var(--text); display: flex; align-items: center; justify-content: center; }
+.role-count-warning { color: var(--danger); font-size: 12px; margin-left: 8px; }
+
+.add-role-row { margin-top: 8px; }
+.add-role-row select { width: 100%; }
+
+.generic-info { margin-top: 8px; font-size: 13px; color: var(--text-dim); }
+
+.toggle-row {
+  display: flex; align-items: center; gap: 10px; padding: 10px 0;
+  cursor: pointer; font-size: 14px;
+}
+.toggle-row input[type="checkbox"] {
+  width: 18px; height: 18px; accent-color: var(--accent-gold);
+}
+
+.template-row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+
+/* ===== Tabs ===== */
+.tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 2px solid var(--border); }
+.tab {
+  background: none; border: none; color: var(--text-dim);
+  padding: 10px 16px; font-size: 14px; border-bottom: 2px solid transparent;
+  margin-bottom: -2px; cursor: pointer;
+}
+.tab.active { color: var(--accent-gold); border-bottom-color: var(--accent-gold); }
+.tab:hover { color: var(--text-bright); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ===== 俯视桌面视图 ===== */
+#preGamePanel {
+  position: relative; width: 100%; height: 100%;
+  display: flex; flex-direction: column; align-items: center;
+  overflow: hidden;
+}
+#topLeftButtons {
+  position: absolute; top: 10px; left: 10px; z-index: 100;
+  display: flex; flex-direction: column; gap: 8px;
+}
+#tableContainer {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  width: 100%; padding: 20px; overflow: auto;
+  min-height: 0; /* 防止 flex 子元素溢出 */
+}
+#tableCanvas {
+  display: block; cursor: pointer; flex-shrink: 0;
+}
+
+/* ===== 底部操作栏 ===== */
+#preGameActions {
+  display: flex; align-items: center; justify-content: center;
+  gap: 20px; padding: 12px 20px; z-index: 10;
+  flex-shrink: 0; flex-wrap: wrap;
+  background: var(--surface); border-top: 1px solid var(--border);
+  width: 100%;
+}
+#gameActionButtons { display: flex; gap: 10px; }
+
+/* ===== 缩放控件 ===== */
+#zoomControls {
+  display: flex; align-items: center; gap: 6px;
+}
+.btn-zoom {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--surface-light); color: var(--text);
+  border: 1px solid var(--border); font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: bold;
+}
+.btn-zoom:hover { border-color: var(--accent-gold); color: var(--accent-gold); }
+.btn-zoom-reset {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: none; color: var(--text-dim); font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+}
+.btn-zoom-reset:hover { color: var(--text-bright); }
+#zoomLabel {
+  font-size: 14px; color: var(--accent-gold); font-weight: bold;
+  min-width: 45px; text-align: center;
+}
+
+/* ===== 游戏面板布局 ===== */
+#gamePanel {
+  width: 100%; height: 100%; display: flex; flex-direction: column;
+}
+
+/* ===== 顶栏 ===== */
+#topBar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 16px; background: var(--surface);
+  border-bottom: 1px solid var(--border); height: 48px;
+  flex-shrink: 0; gap: 12px;
+}
+.top-left { display: flex; align-items: center; gap: 8px; min-width: 120px; }
+.top-left #phaseIcon { font-size: 20px; }
+.top-left #phaseName { font-size: 14px; font-weight: bold; color: var(--accent-gold); }
+.top-center { flex: 1; }
+#timerBar {
+  position: relative; height: 6px; background: var(--bg-light);
+  border-radius: 3px; overflow: hidden; max-width: 300px; margin: 0 auto;
+}
+#timerFill {
+  height: 100%; background: var(--accent-gold); border-radius: 3px;
+  transition: width 0.3s linear; width: 100%;
+}
+#timerFill.warning { background: var(--danger); }
+#timerText {
+  position: absolute; top: -18px; right: 0; font-size: 12px; color: var(--text-dim);
+}
+.top-right { display: flex; align-items: center; gap: 8px; min-width: 100px; justify-content: flex-end; }
+#sheriffBadge {
+  color: var(--accent-gold); font-size: 13px; font-weight: bold;
+}
+
+/* ===== 中央区域 ===== */
+#centerArea {
+  flex: 1; overflow: hidden; position: relative;
+}
+.phase-content {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 20px; overflow-y: auto;
+}
+
+/* ===== 警长竞选 ===== */
+.candidate-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 12px; max-width: 500px; margin: 16px 0;
+}
+.candidate-item {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 12px; background: var(--surface); border: 2px solid var(--border);
+  border-radius: var(--radius-lg); cursor: pointer; transition: var(--transition);
+}
+.candidate-item:hover { border-color: var(--accent-gold); }
+.candidate-item.selected { border-color: var(--accent-gold); background: var(--surface-light); }
+.candidate-avatar {
+  width: 44px; height: 44px; border-radius: 50%; display: flex;
+  align-items: center; justify-content: center; font-weight: bold;
+  font-size: 14px;
+}
+
+/* ===== 夜间 ===== */
+#nightOverlay {
+  text-align: center; width: 100%; max-width: 500px;
+}
+#nightOverlay h2 { color: var(--accent-red); font-size: 28px; margin-bottom: 12px; }
+#nightPrompt { font-size: 16px; color: var(--text-dim); margin-bottom: 20px; }
+
+.target-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  gap: 10px; max-width: 500px; margin: 16px auto; width: 100%;
+}
+.target-item {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 10px; background: var(--surface); border: 2px solid var(--border);
+  border-radius: var(--radius-lg); cursor: pointer; transition: var(--transition);
+}
+.target-item:hover { border-color: var(--accent-gold); }
+.target-item.selected { border-color: var(--accent-red); background: rgba(139, 0, 0, 0.2); }
+.target-item.dead { opacity: 0.3; pointer-events: none; }
+.target-avatar {
+  width: 40px; height: 40px; border-radius: 50%; display: flex;
+  align-items: center; justify-content: center; font-weight: bold;
+  font-size: 13px; border: 2px solid var(--border);
+}
+.target-seat { font-size: 11px; color: var(--text-dim); }
+.target-name { font-size: 10px; color: var(--text-dim); }
+
+.action-buttons { display: flex; gap: 12px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+
+/* ===== 天亮 ===== */
+#dawnAnimation { text-align: center; }
+#dawnAnimation h2 { font-size: 32px; color: var(--accent-gold); margin-bottom: 12px; animation: fadeInUp 0.8s ease; }
+#dawnMessage { font-size: 18px; color: var(--text); animation: fadeIn 1s ease 0.3s both; }
+
+/* ===== 遗言 ===== */
+#phaseLastWords { gap: 16px; }
+#phaseLastWords textarea { max-width: 400px; }
+#lastWordsDisplay { max-width: 400px; text-align: center; }
+#lastWordsText { font-style: italic; color: var(--text-dim); font-size: 16px; padding: 20px; background: var(--surface); border-radius: var(--radius); }
+
+/* ===== 发言 ===== */
+.speech-queue {
+  display: flex; gap: 6px; flex-wrap: wrap; justify-content: center;
+  margin-bottom: 16px;
+}
+.speech-queue-item {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--surface); border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: var(--text-dim);
+}
+.speech-queue-item.current { border-color: var(--accent-gold); animation: pulse 1s infinite; }
+.speech-queue-item.done { opacity: 0.4; }
+.speaker-badge {
+  font-size: 20px; color: var(--accent-gold); margin: 12px 0;
+}
+#speechTimerBar {
+  width: 200px; height: 4px; background: var(--bg-light); border-radius: 2px;
+  margin: 8px auto; overflow: hidden;
+}
+#speechTimerFill { height: 100%; background: var(--accent-green); }
+
+/* ===== 投票 ===== */
+.vote-tally { margin-top: 16px; max-width: 400px; width: 100%; }
+.vote-tally-row {
+  display: flex; justify-content: space-between; padding: 6px 12px;
+  background: var(--surface); margin-bottom: 4px; border-radius: var(--radius);
+}
+.vote-tally-bar {
+  height: 4px; background: var(--accent-red); border-radius: 2px; margin-bottom: 4px;
+}
+
+/* ===== 底栏 ===== */
+#bottomBar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 16px; background: var(--surface);
+  border-top: 1px solid var(--border); height: 48px; flex-shrink: 0;
+}
+.bottom-left { color: var(--text-dim); font-size: 13px; }
+
+/* ===== 角色卡弹窗 ===== */
+.popup-card {
+  background: var(--surface); border: 1px solid var(--accent-gold);
+  border-radius: var(--radius-lg); padding: 32px; text-align: center;
+  max-width: 360px; width: 90vw; position: relative;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.popup-card .btn-close {
+  position: absolute; top: 10px; right: 10px;
+}
+.role-card-icon { font-size: 64px; margin-bottom: 12px; }
+.role-card-team {
+  display: inline-block; padding: 4px 16px; border-radius: 20px;
+  font-size: 13px; font-weight: bold; margin-bottom: 12px;
+}
+.role-card-team.werewolf { background: rgba(139,0,0,0.3); color: var(--accent-red-light); }
+.role-card-team.villager { background: rgba(46,125,50,0.3); color: var(--accent-green-light); }
+.role-card-team.third_party { background: rgba(123,31,162,0.3); color: #ce93d8; }
+.role-card-desc { color: var(--text-dim); font-size: 14px; line-height: 1.6; margin-bottom: 12px; }
+.role-card-status { font-size: 13px; color: var(--accent-gold); }
+
+/* ===== 狼人聊天 ===== */
+#wolfChatPanel {
+  position: fixed; bottom: 0; right: 0; width: 280px;
+  background: var(--surface); border-left: 1px solid var(--border);
+  border-top: 1px solid var(--border); border-radius: var(--radius-lg) 0 0 0;
+  z-index: 150; display: flex; flex-direction: column; max-height: 50vh;
+}
+#wolfChatHeader {
+  padding: 10px 14px; background: var(--accent-red);
+  color: white; font-size: 13px; font-weight: bold;
+  display: flex; justify-content: space-between; align-items: center;
+  border-radius: var(--radius-lg) 0 0 0;
+}
+#wolfChatMessages {
+  flex: 1; overflow-y: auto; padding: 10px; display: flex;
+  flex-direction: column; gap: 6px; max-height: 200px;
+}
+.wolf-chat-msg {
+  font-size: 12px; padding: 6px 10px; background: var(--bg-light);
+  border-radius: var(--radius); line-height: 1.4;
+}
+.wolf-chat-msg .chat-seat { color: var(--accent-red); font-weight: bold; }
+.wolf-chat-msg .chat-time { color: var(--text-dim); font-size: 10px; }
+#wolfChatInput {
+  display: flex; padding: 8px; gap: 6px; border-top: 1px solid var(--border);
+}
+#wolfChatInput input {
+  flex: 1; padding: 6px 10px; font-size: 13px;
+}
+#wolfChatInput button { padding: 6px 12px; font-size: 12px; }
+
+/* ===== 弹窗（游戏结果等） ===== */
+#resultPopup { max-width: 500px; }
+#resultPopup h2 { font-size: 28px; margin-bottom: 8px; }
+#resultPopup .win-villager { color: var(--accent-green-light); }
+#resultPopup .win-werewolf { color: var(--accent-red-light); }
+#resultTable {
+  margin: 16px 0; width: 100%;
+}
+.result-row {
+  display: flex; align-items: center; gap: 10px; padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.result-row .res-avatar {
+  width: 32px; height: 32px; border-radius: 50%; display: flex;
+  align-items: center; justify-content: center; font-size: 12px;
+  font-weight: bold; flex-shrink: 0;
+}
+.result-row .res-role { font-size: 13px; color: var(--text-dim); }
+.result-row .res-team { font-size: 12px; margin-left: auto; }
+
+/* ===== 等待中迷你桌面 ===== */
+#phaseWaiting {
+  flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+}
+#miniTableCanvas { max-width: 350px; max-height: 350px; }
+#waitingStatus { font-size: 16px; color: var(--text-dim); }
+
+/* ===== 游戏结束中央视图 ===== */
+#phaseGameOver { gap: 16px; }
+#phaseGameOver h2 { font-size: 32px; }
+#roleRevealTable {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px; max-width: 600px; width: 100%; margin-top: 16px;
+}
+.role-reveal-card {
+  background: var(--surface); border-radius: var(--radius);
+  padding: 10px; text-align: center; border: 1px solid var(--border);
+}
+.role-reveal-card .rr-seat { font-size: 12px; color: var(--text-dim); }
+.role-reveal-card .rr-emoji { font-size: 28px; }
+.role-reveal-card .rr-name { font-size: 13px; }
+.role-reveal-card.werewolf { border-color: var(--accent-red); }
+.role-reveal-card.villager { border-color: var(--accent-green); }
+
+/* ===== 动画 ===== */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(201, 168, 76, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(201, 168, 76, 0); }
+}
+@keyframes nightTransition {
+  0% { background: rgba(0,0,0,1); }
+  80% { background: rgba(0,0,0,1); }
+  100% { background: rgba(0,0,0,0); }
+}
+
+/* ===== 滚动条 ===== */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ===== Canvas 座位标签 ===== */
+#tableContainer canvas { cursor: pointer; }
+
+/* ============================================================
+ 响应式 - 移动端
+============================================================ */
+@media (max-width: 1024px) and (min-width: 769px) {
+  .side-panel {
+    width: 380px; max-width: 90vw;
+  }
+}
+
+@media (max-width: 768px) {
+  .side-panel {
+    width: 100vw; max-width: 100vw; height: 100vh;
+    max-height: 100vh; border-radius: 0;
+  }
+  .popup-card {
+    width: 95vw; max-width: 95vw; padding: 20px;
+  }
+  #topBar { padding: 6px 10px; height: 42px; }
+  #topBar #phaseName { font-size: 12px; }
+  #bottomBar { height: 42px; padding: 6px 10px; }
+  .target-grid { grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 8px; }
+  .target-item { padding: 6px; }
+  .target-avatar { width: 32px; height: 32px; font-size: 11px; }
+  .candidate-grid { grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); }
+  #wolfChatPanel { width: 100vw; right: 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+  #preGameActions { padding: 10px; gap: 10px; }
+  #preGameActions #gameActionButtons { gap: 6px; }
+  .btn-primary-large { padding: 10px 28px; font-size: 15px; }
+  .role-config-grid { grid-template-columns: 1fr; }
+  #miniTableCanvas { max-width: 250px; max-height: 250px; }
+  .btn-zoom { width: 32px; height: 32px; font-size: 16px; }
+  #zoomLabel { font-size: 12px; min-width: 38px; }
+}
+
+@media (max-width: 420px) {
+  .target-grid { grid-template-columns: repeat(4, 1fr); }
+  .candidate-grid { grid-template-columns: repeat(3, 1fr); }
+  #preGameActions { padding: 8px; gap: 6px; flex-direction: column; }
+}

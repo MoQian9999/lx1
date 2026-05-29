@@ -56,8 +56,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         pendingGameMessages = [];
       }
-    } else if (msg.type === "game_action" || msg.type === "play_again" || msg.type === "game_over" || msg.type === "set_ready" || msg.type === "leave_room") {
-      // 将游戏 iframe 的操作转发到服务器
+    } else if (msg.type === "game_action" || msg.type === "play_again" || msg.type === "game_over" || msg.type === "set_ready" || msg.type === "leave_room" || (msg.type && msg.type.startsWith("ww_"))) {
+      // 将游戏 iframe 的操作转发到服务器 (包括狼人杀等插件的消息)
       sendMessage(msg);
     }
   });
@@ -255,6 +255,13 @@ function handleMessage(msg) {
 
     case "error":
       alert(msg.message || "操作失败");
+      break;
+
+    default:
+      // 转发游戏插件消息（如 ww_*）到游戏 iframe
+      if (msg.type && msg.type.startsWith("ww_")) {
+        notifyGameIframe(msg);
+      }
       break;
   }
 }

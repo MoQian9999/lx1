@@ -112,6 +112,42 @@ const rooms = new Map();
 // 战绩统计：Map<gameName, Map<username, { wins, losses, draws }>>
 const gameStats = new Map();
 
+// ---------- 游戏插件：扫描 box/*/server.js，有则加载 ----------
+const gamePlugins = new Map();
+(function loadPlugins() {
+  const boxPath = path.join(__dirname, "box");
+  let dirs;
+  try {
+    dirs = fs.readdirSync(boxPath, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const dir of dirs) {
+    if (!dir.isDirectory()) continue;
+    const pluginPath = path.join(boxPath, dir.name, "server.js");
+    if (fs.existsSync(pluginPath)) {
+      try {
+        gamePlugins.set(dir.name, require(pluginPath));
+        console.log("[插件] 已加载:", dir.name);
+      } catch (e) {
+        console.warn("[插件] 加载失败:", dir.name, e.message);
+      }
+    }
+  }
+})();
+// 暴露 API 给插件使用
+const pluginCtx = {
+  get users() { return users; },
+  get rooms() { return rooms; },
+  get gameStats() { return gameStats; },
+  broadcastToRoom,
+  broadcastUserList,
+  sendRoomUpdate,
+  removePlayerFromRoom,
+  recordGameResult,
+  broadcastStats,
+};
+
 // 生成唯一房间 ID
 let roomIdCounter = 0;
 function generateRoomId() {
@@ -226,6 +262,12 @@ function removePlayerFromRoom(username) {
     u.currentRoom = null;
     u.currentGame = null;
     return;
+  }
+
+  // 通知游戏插件（如果存在）
+  const plugin = gamePlugins.get(room.gameName);
+  if (plugin && plugin.onPlayerLeave) {
+    plugin.onPlayerLeave(username, room, pluginCtx);
   }
 
   // 从房间移除该玩家
@@ -404,6 +446,9 @@ wss.on("connection", (ws) => {
           status: "waiting",
         };
         rooms.set(roomId, room);
+        // 初始化游戏插件
+        const plugin = gamePlugins.get(gameName);
+        if (plugin && plugin.init) plugin.init(room);
         u.currentRoom = roomId;
         u.currentGame = gameName;
 
@@ -646,8 +691,18 @@ wss.on("connection", (ws) => {
         break;
       }
 
-      default:
+      default: {
+        // 委托给游戏插件（如果有）
+        if (!currentUsername) return;
+        const u = users.get(currentUsername);
+        if (!u || !u.currentRoom) return;
+        const room = rooms.get(u.currentRoom);
+        const plugin = room && gamePlugins.get(room.gameName);
+        if (plugin && plugin.handleMessage) {
+          plugin.handleMessage(msg, currentUsername, pluginCtx);
+        }
         break;
+      }
     }
   });
 
